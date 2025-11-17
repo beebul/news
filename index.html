@@ -4,83 +4,91 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Text-Only News Browser</title>
+    <!-- Link to the external stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-gray-900 text-gray-300 p-4 md:p-8 terminal">
+<body>
 
-    <div class="max-w-3xl mx-auto">
-        <h1 class="text-2xl font-bold text-blue-400 mb-4">> Updates</h1>
+    <div class="container">
+        <h1>Text-Only News</h1>
 
-        <!-- Region Tabs -->
-        <div class="flex space-x-2 mb-4">
-            <button data-region="BBC UK" class="region-tab active:bg-blue-600 bg-gray-700 text-white py-2 px-4 rounded-lg">
-                BBC UK
-            </button>
-            <button data-region="ABC Australia" class="region-tab bg-gray-800 hover:bg-gray-700 text-gray-400 py-2 px-4 rounded-lg">
-                ABC Aus
-            </button>
-            <button data-region="BBC Australia" class="region-tab bg-gray-800 hover:bg-gray-700 text-gray-400 py-2 px-4 rounded-lg">
-                BBC Aust
-            </button>
+        <!-- Tab Bar for regions -->
+        <div class="tab-bar">
+            <button class="tab-button active" data-region="UK">BBC UK</button>
+            <button class="tab-button" data-region="ABC_AU">ABC Australia</button>
+            <button class="tab-button" data-region="BBC_AU">BBC Australia</button>
         </div>
 
-        <!-- Refresh Button -->
-       <br> <button id="refresh-button" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg mb-4 w-full md:w-auto">
-            Refresh
-        </button>
-
-        <!-- Status Messages -->
-        <div id="status" class="my-4"></div>
-
-        <!-- Headlines List -->
-        <div id="headlines-list" class="space-y-2">
-            <!-- Headlines will be injected here -->
-        </div>
-
+        <button id="refresh-button">Refresh Headlines</button>
+        
+        <!-- Status for loading, errors, etc. -->
+        <div id="status-container"></div>
+        
+        <!-- List where headlines will be injected -->
+        <div id="headlines-list"></div>
     </div>
 
     <script type="module">
         // --- CONFIGURATION ---
-        // This is the main API key for the Gemini model.
-        // It's intentionally left blank, as the environment will provide it.
-        const apiKey = "AIzaSyALL9KBZ--RzZhdJ5h43jQGDUOIIHC0aak";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        
+        <!--
+            !!! VERY IMPORTANT !!!
+            When you paste your API key below, make sure you
+            paste it *INSIDE* the quotes.
+
+            CORRECT:
+            const apiKey = "AIzaSyALL9KBZ--RzZhdJ5h43jQGDUOIIHC0aak";
+
+            INCORRECT (will cause a SyntaxError):
+            const apiKey = AIzaSy...your...key...here;
+        -->
+        // Paste your Gemini API Key here.
+        // This is the simple, non-proxy version.
+        const apiKey = "PASTE_YOUR_GEMINI_API_KEY_HERE";
+        
+        // --- End of Configuration ---
+
+        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+        // App state
+        let currentRegion = "UK";
+        let storyCache = {}; // Cache for fetched stories
+
+        // DOM Elements
+        const headlinesList = document.getElementById('headlines-list');
+        const statusContainer = document.getElementById('status-container');
+        const refreshButton = document.getElementById('refresh-button');
+        const tabButtons = document.querySelectorAll('.tab-button');
 
         const queryMap = {
-            "BBC UK": "current top 8 news headlines from BBC UK",
-            "ABC Australia": "current top 8 news headlines from ABC News Australia",
-            "BBC Australia": "current top 8 news headlines from BBC News about Australia"
+            UK: {
+                query: "Generate 8 plausible, current-sounding headlines for BBC UK news.",
+                storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC UK. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
+            },
+            ABC_AU: {
+                query: "Generate 8 plausible, current-sounding headlines for ABC Australia news.",
+                storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on ABC News (Australia). Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
+            },
+            BBC_AU: {
+                query: "Generate 8 plausible, current-sounding headlines for BBC News Australia.",
+                storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC News Australia. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
+            }
         };
 
-        let currentRegion = "BBC UK";
-        let activeStoryElement = null;
-
-        // --- DOM ELEMENTS ---
-        const regionTabs = document.querySelectorAll('.region-tab');
-        const refreshButton = document.getElementById('refresh-button');
-        const headlinesList = document.getElementById('headlines-list');
-        const status = document.getElementById('status');
-
-        // --- GEMINI API CALLER ---
         /**
-         * Generic function to call the Gemini API.
-         * @param {string} userQuery - The user's prompt.
-         * @param {object | null} systemInstruction - The system prompt.
-         * @param {object[] | null} tools - Tools, e.g., Google Search.
-         * @param {number} retries - Number of retries for exponential backoff.
-         * @returns {Promise<string>} - The text response from the model.
+         * A wrapper for the Gemini API call with retry logic.
          */
-        async function callGemini(userQuery, systemInstruction = null, tools = null, retries = 3) {
+        async function callGemini(userQuery, systemInstruction, useSearch) {
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
-                ...(systemInstruction && { systemInstruction }),
-                ...(tools && { tools }),
+                ...(systemInstruction && { systemInstruction: { parts: [{ text: systemInstruction }] } }),
+                ...(useSearch && { tools: [{ "google_search": {} }] }),
             };
 
-            let delay = 1000; // Initial delay 1s
-            for (let i = 0; i < retries; i++) {
+            let lastError = null;
+            for (let attempt = 1; attempt <= 3; attempt++) {
                 try {
-                    const response = await fetch(apiUrl, {
+                    const response = await fetch(GEMINI_API_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -92,179 +100,188 @@
 
                     const result = await response.json();
                     const candidate = result.candidates?.[0];
+                    const text = candidate?.content?.parts?.[0]?.text;
 
-                    if (candidate && candidate.content?.parts?.[0]?.text) {
-                        return candidate.content.parts[0].text;
+                    if (text) {
+                        return text;
                     } else {
-                        throw new Error("Invalid API response structure or empty content.");
+                        throw new Error("Invalid API response structure.");
                     }
                 } catch (error) {
-                    console.error(`Attempt ${i + 1} failed:`, error.message);
-                    if (i === retries - 1) {
-                        throw new Error(`Failed to call Gemini API after ${retries} attempts: ${error.message}`);
-                    }
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 2; // Exponential backoff
+                    console.error(`Attempt ${attempt} failed:`, error.message);
+                    lastError = error;
+                    await new Promise(res => setTimeout(res, 1000 * attempt)); // Exponential backoff
                 }
+            }
+            throw new Error(`Failed to call Gemini API after 3 attempts: ${lastError.message}`);
+        }
+
+        /**
+         * Sets the status message, with an optional spinner.
+         */
+        function setStatus(message, isLoading = false, isError = false) {
+            statusContainer.innerHTML = ''; // Clear previous status
+            if (message) {
+                const statusMessage = document.createElement('div');
+                statusMessage.className = 'status-message';
+                if (isError) {
+                    statusMessage.classList.add('error');
+                }
+
+                if (isLoading) {
+                    const spinner = document.createElement('div');
+                    spinner.className = 'loading-spinner';
+                    statusMessage.appendChild(spinner);
+                }
+                
+                const textNode = document.createElement('span');
+                textNode.textContent = message;
+                statusMessage.appendChild(textNode);
+                
+                statusContainer.appendChild(statusMessage);
             }
         }
 
-        // --- CORE LOGIC ---
-
         /**
-         * Fetches *simulated* headlines (no search) to ensure a list is always generated.
+         * Fetches and displays the list of headlines.
          */
-        async function fetchNews(region) {
-            setLoading(true, "Fetching headlines...");
-            headlinesList.innerHTML = ''; // Clear old headlines
+        async function fetchNews() {
+            setStatus("Fetching headlines...", true);
+            headlinesList.innerHTML = '';
+            storyCache = {}; // Clear the cache on a new refresh
+            refreshButton.disabled = true;
 
             try {
-                const userQuery = `Generate 8 current-sounding, plausible news headlines for ${queryMap[region]}. Respond ONLY with the 8 headlines, each on a new line. Do not number them or use markdown.`;
-                const systemInstruction = {
-                    parts: [{ text: "You are a news headline simulator. Provide a clean list of headlines, one per line." }]
-                };
-
-                // Note: 'tools' is intentionally null. This is a pure text generation call.
-                const responseText = await callGemini(userQuery, systemInstruction, null);
+                const regionData = queryMap[currentRegion];
+                const rawText = await callGemini(regionData.query, null, false);
                 
-                const headlines = responseText.trim().split('\n').filter(Boolean);
+                // Parse headlines (assuming they are numbered or bulleted)
+                const headlines = rawText.match(/(\d+\.|-|\*)\s*(.*)/g)
+                    ?.map(line => line.replace(/(\d+\.|-K)\s*/, '').trim()) // Fixed a typo here (K was K instead of *)
+                    .filter(line => line.length > 5); // Filter out short lines
 
-                if (headlines.length === 0) {
-                    throw new Error("Model returned an empty list of headlines.");
+                if (!headlines || headlines.length === 0) {
+                    throw new Error("Could not parse headlines from API response.");
                 }
 
-                renderHeadlines(headlines);
-                setLoading(false);
+                headlines.forEach((headlineText, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'headline-item';
+                    
+                    const headlineEl = document.createElement('div');
+                    headlineEl.className = 'headline';
+                    headlineEl.textContent = headlineText;
+                    headlineEl.dataset.index = index;
+                    
+                    const storyContentEl = document.createElement('div');
+                    storyContentEl.className = 'story-content';
+                    storyContentEl.id = `story-${index}`;
+                    
+                    item.appendChild(headlineEl);
+                    item.appendChild(storyContentEl);
+                    headlinesList.appendChild(item);
+                });
 
+                setStatus(""); // Clear loading status
             } catch (error) {
                 console.error("Error fetching headlines:", error);
-                setLoading(false, `Error: ${error.message}`);
+                setStatus(`Error fetching headlines: ${error.message}`, false, true);
+            } finally {
+                refreshButton.disabled = false;
             }
         }
 
         /**
-         * Fetches the full story summary (with search) for a given headline topic.
+         * Fetches and displays a single story when a headline is clicked.
          */
-        async function viewStory(headlineText, storyElement) {
-            // Close any previously opened story
-            if (activeStoryElement && activeStoryElement !== storyElement) {
-                activeStoryElement.style.display = 'none';
-                activeStoryElement.innerHTML = ''; // Clear content
-            }
-            activeStoryElement = storyElement;
+        async function viewStory(headlineEl) {
+            const headlineText = headlineEl.textContent;
+            const storyId = `story-${headlineEl.dataset.index}`;
+            const storyContentEl = document.getElementById(storyId);
 
-            // If story is already open, close it
-            if (storyElement.style.display === 'block') {
-                storyElement.style.display = 'none';
-                storyElement.innerHTML = '';
+            if (!storyContentEl) return;
+
+            // Toggle visibility: If it's already open, close it.
+            if (storyContentEl.style.display === 'block') {
+                storyContentEl.style.display = 'none';
                 return;
             }
 
-            // Show story element with a loading state
-            storyElement.style.display = 'block';
-            storyElement.innerHTML = `
-                <div class="flex items-center space-x-2">
-                    <div class="loading-spinner"></div>
-                    <span>Fetching plain-text story for: "${headlineText}"...</span>
-                </div>`;
+            // --- Caching Logic ---
+            // Check cache first
+            if (storyCache[headlineText]) {
+                storyContentEl.textContent = storyCache[headlineText];
+                storyContentEl.style.display = 'block';
+                return;
+            }
+            // --- End Caching Logic ---
+
+            // If not in cache, fetch it
+            storyContentEl.textContent = "Loading story...";
+            storyContentEl.style.display = 'block';
 
             try {
-                const userQuery = `Search for real-time news about the following topic: "${headlineText}". Then, provide a comprehensive, multi-paragraph, plain-text extraction and summary of the full story. Format it as unformatted text, perfect for a text-only terminal browser.`;
-                const systemInstruction = {
-                    parts: [{ text: "You are a plain-text news summarizer. You provide detailed, unformatted text summaries based on real-time search results. Do not use markdown." }]
-                };
-                const tools = [{ "google_search": {} }];
-
-                const storyText = await callGemini(userQuery, systemInstruction, tools);
-
-                // Populate the story element with the full text
-                storyElement.innerHTML = storyText;
-
+                const regionData = queryMap[currentRegion];
+                const storyText = await callGemini(headlineText, regionData.storySystem, true);
+                
+                storyContentEl.textContent = storyText;
+                
+                // --- Caching Logic ---
+                // Save the fetched story to the cache
+                storyCache[headlineText] = storyText;
+                // --- End CachingLogic ---
+                
             } catch (error) {
                 console.error("Error fetching story:", error);
-                storyElement.innerHTML = `<span class="text-red-400">Error: Could not load story. ${error.message}</span>`;
-            }
-        }
-
-        // --- RENDERING & UI ---
-
-        /**
-         * Renders the list of headlines.
-         */
-        function renderHeadlines(headlines) {
-            headlinesList.innerHTML = ''; // Clear previous list
-            headlines.forEach((headline, index) => {
-                const headlineItem = document.createElement('div');
-                
-                const headlineText = document.createElement('div');
-                headlineText.className = "headline text-lg text-blue-300 p-2 rounded-lg";
-                headlineText.textContent = `> ${headline}`;
-                
-                const storyContent = document.createElement('div');
-                storyContent.className = "story-content";
-                storyContent.id = `story-${index}`;
-                
-                headlineText.onclick = () => viewStory(headline, storyContent);
-                
-                headlineItem.appendChild(headlineText);
-                headlineItem.appendChild(storyContent);
-                headlinesList.appendChild(headlineItem);
-            });
-        }
-
-        /**
-         * Sets the loading/status message.
-         */
-        function setLoading(isLoading, message = "") {
-            if (isLoading) {
-                status.innerHTML = `
-                    <div class="flex items-center space-x-2 text-yellow-400">
-                        <div class="loading-spinner"></div>
-                        <span>${message}</span>
-                    </div>`;
-                refreshButton.disabled = true;
-                refreshButton.classList.add('opacity-50', 'cursor-not-allowed');
-            } else {
-                status.innerHTML = message ? `<span class="text-red-400">${message}</span>` : '';
-                refreshButton.disabled = false;
-                refreshButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                storyContentEl.textContent = `Error loading story: ${error.message}`;
             }
         }
 
         /**
-         * Handles region tab switching.
+         * Changes the active region and fetches new news.
          */
-        function setRegion(region) {
-            currentRegion = region;
-            regionTabs.forEach(tab => {
-                if (tab.dataset.region === region) {
-                    tab.classList.add('active:bg-blue-600', 'bg-gray-700', 'text-white');
-                    tab.classList.remove('bg-gray-800', 'hover:bg-gray-700', 'text-gray-400');
-                } else {
-                    tab.classList.remove('active:bg-blue-600', 'bg-gray-700', 'text-white');
-                    tab.classList.add('bg-gray-800', 'hover:bg-gray-700', 'text-gray-400');
-                }
+        function setRegion(e) {
+            const newRegion = e.target.dataset.region;
+            if (newRegion === currentRegion) {
+                return; // Don't re-fetch if clicking the same tab
+            }
+            
+            currentRegion = newRegion;
+            
+            // Update active tab style
+            tabButtons.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.region === newRegion);
             });
-            // Automatically fetch news for the new region
-            fetchNews(currentRegion);
+            
+            fetchNews(); // Fetch news for the new region
         }
 
-        // --- INITIALIZATION ---
-        regionTabs.forEach(tab => {
-            tab.addEventListener('click', () => setRegion(tab.dataset.region));
+        // --- Event Listeners ---
+        
+        // Handle clicks on the headlines list (event delegation)
+        headlinesList.addEventListener('click', (e) => {
+            if (e.target.classList.contains('headline')) {
+                viewStory(e.target);
+            }
         });
 
-        refreshButton.addEventListener('click', () => fetchNews(currentRegion));
+        // Handle tab clicks
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', setRegion);
+        });
 
-        // Initial load
-        setRegion(currentRegion);
+        // Handle refresh button click
+        refreshButton.addEventListener('click', fetchNews);
+
+        // --- Initial Load ---
+        // Check API Key and fetch news on load
+        if (apiKey && apiKey !== "PASTE_YOUR_GEMINI_API_KEY_HERE") {
+            fetchNews();
+        } else {
+            setStatus("Please add your Gemini API key to index.html to begin.", false, true);
+            refreshButton.disabled = true;
+        }
 
     </script>
 </body>
-
 </html>
-
-
-
-
-
