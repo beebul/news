@@ -29,27 +29,9 @@
     </div>
 
     <script type="module">
-        // --- CONFIGURATION ---
-        
-        <!--
-            !!! VERY IMPORTANT !!!
-            When you paste your API key below, make sure you
-            paste it *INSIDE* the quotes.
-
-            CORRECT:
-            const apiKey = "AIzaSyALL9KBZ--RzZhdJ5h43jQGDUOIIHC0aak";
-
-            INCORRECT (will cause a SyntaxError):
-            const apiKey = AIzaSy...your...key...here;
-        -->
-        // Paste your Gemini API Key here.
         // This is the simple, non-proxy version.
-        const apiKey = "PASTE_YOUR_GEMINI_API_KEY_HERE";
-        
-        // --- End of Configuration ---
-
+        const apiKey = "AIzaSyALL9KBZ--RzZhdJ5h43jQGDUOIIHC0aak";
         const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
         // App state
         let currentRegion = "UK";
         let storyCache = {}; // Cache for fetched stories
@@ -285,4 +267,5 @@
     </script>
 </body>
 </html>
+
 
