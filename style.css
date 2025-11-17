@@ -1,0 +1,141 @@
+/* * Styles for the Text-Only News Browser
+ * Mimics a simple, clean "Notepad" look.
+ */
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
+    background-color: #ffffff;
+    color: #000000;
+    padding: 10px 20px;
+    margin: 0;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+/* Tab Bar */
+.tab-bar {
+    display: flex;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 15px;
+}
+
+.tab-button {
+    background: none;
+    border: none;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 16px;
+    font-family: 'Segoe UI', sans-serif;
+    color: #555;
+    margin-bottom: -1px; /* Aligns with the bottom border */
+    border-bottom: 2px solid transparent; /* Placeholder for active state */
+}
+
+.tab-button.active {
+    color: #000;
+    border-bottom: 2px solid #0078d4; /* Windows blue */
+    font-weight: 600;
+}
+
+.tab-button:hover {
+    background-color: #f0f0f0;
+}
+
+/* Main Button */
+#refresh-button {
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    padding: 5px 15px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 15px;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+#refresh-button:hover {
+    background-color: #e6e6e6;
+    border-color: #bbb;
+}
+
+#refresh-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #f0f0f0;
+    border-color: #ccc;
+}
+
+/* Status Messages & Loading */
+.status-message {
+    margin: 15px 0;
+    font-style: italic;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.status-message.error {
+    color: #d00000; /* Red for errors */
+    font-style: normal;
+    font-weight: bold;
+    /* Allow error text to wrap */
+    white-space: normal; 
+    word-wrap: break-word;
+}
+
+.loading-spinner {
+    border: 3px solid #f0f0f0; /* Light grey */
+    border-top: 3px solid #0078d4; /* Windows Blue */
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+    flex-shrink: 0; /* Prevent spinner from shrinking */
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Headlines & Story */
+.headline-item {
+    margin-bottom: 5px;
+}
+
+.headline {
+    font-size: 16px;
+    color: #0078d4;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.headline:hover {
+    color: #005a9e;
+}
+
+.story-content {
+    /* This is the "notepad" text area */
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 14px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background-color: #ffffff; /* Same as body */
+    border: none;
+    padding: 10px 0 10px 5px; /* Slight indent */
+    margin-top: 5px;
+    display: none; /* Hidden by default */
+    color: #111; /* Slightly off-black */
+}
