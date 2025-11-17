@@ -1,4 +1,4 @@
-Text-Only News Browser
+Text-Only News Browser https://gemini.google.com/app/4eb69f5feeb66f4c?hl=en-AU
 
 This is a simple, single-file web application that acts as a text-only news browser. It uses the Gemini API to provide a clean, terminal-style interface for browsing news headlines and reading full, plain-text summaries of the stories.
 
@@ -49,5 +49,6 @@ Under "Build and deployment," select your main (or master) branch as the source.
 Click "Save". After a minute or two, your site will be live at a URL like your-username.github.io/your-repository-name.
 
 3. Vercel / Cloudflare Pages
+
 
 These are two other fantastic, modern platforms that are very similar to Netlify and also offer generous free tiers for static sites.
