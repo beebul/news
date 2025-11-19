@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Text-Only News Browser</title>
+    <title>Teletext News</title>
     <!-- Link to the external stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div class="container">
-        <h1>Teletext</h1>
+        <h1>Teletext News</h1>
 
         <!-- Tab Bar for regions -->
         <div class="tab-bar">
@@ -30,79 +30,68 @@
 
     <script type="module">
         // --- CONFIGURATION ---
-        
-        // !!! IMPORTANT !!!
-        // Paste your Cloudflare Worker URL here.
-        // It will look like: https://gemini-proxy.your-name.workers.dev
-		const proxyApiUrl = "https://news-proxy.beebul.workers.dev";
-        
-        // --- End of Configuration ---
+        // The app loads 'config.json' to find the API URL.
+        let proxyApiUrl = "";
+        let isConfigValid = false;
 
-        // App state
+        // --- APP STATE ---
         let currentRegion = "UK";
         let storyCache = {}; // Cache for fetched stories
-        let isConfigValid = true;
 
-        // DOM Elements
+        // --- DOM ELEMENTS ---
         const headlinesList = document.getElementById('headlines-list');
         const statusContainer = document.getElementById('status-container');
         const refreshButton = document.getElementById('refresh-button');
         const tabButtons = document.querySelectorAll('.tab-button');
 
-        // --- CONFIGURATION CHECK ---
-        if (proxyApiUrl.includes("your-name") || proxyApiUrl === "") {
-            isConfigValid = false;
-            const errorMsg = '<strong>Configuration Error:</strong> The "proxyApiUrl" in index.html is not set. Please edit the file and add your Cloudflare Worker URL.';
-            
-            // Show a floating warning box
-            const showWarning = () => {
-                let warningBox = document.getElementById('config-warning');
-                if (!warningBox) {
-                    warningBox = document.createElement('div');
-                    warningBox.id = 'config-warning';
-                    warningBox.style.position = 'fixed';
-                    warningBox.style.top = '10px';
-                    warningBox.style.left = '50%';
-                    warningBox.style.transform = 'translateX(-50%)';
-                    warningBox.style.backgroundColor = '#fff0f0';
-                    warningBox.style.border = '1px solid #d00';
-                    warningBox.style.padding = '15px';
-                    warningBox.style.borderRadius = '5px';
-                    warningBox.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
-                    warningBox.style.zIndex = '1000';
-                    warningBox.style.fontFamily = 'Segoe UI, sans-serif';
-                    warningBox.innerHTML = `${errorMsg} <button style="margin-left: 15px; border: 1px solid #ccc; background: #f0f0f0; padding: 2px 8px; border-radius: 3px; cursor: pointer;" onclick="this.parentElement.style.display=\'none\'">Close</button>`;
-                    document.body.appendChild(warningBox);
-                }
-            };
-            showWarning();
-        }
-
         const queryMap = {
             UK: {
-                // UPDATED: Requesting 20 headlines + strict instructions to avoid categorization
-                query: "Generate 20 plausible, current-sounding headlines for BBC UK news. List them strictly as a flat list of the 'Top Stories' from the homepage. Do NOT categorize them or use section headers (like 'Politics:' or 'Economy:'). Just provide the headline text, one per line.",
+                query: "Use Google Search to find the current top news headlines on the 'BBC News UK' homepage right now. List the top 20 distinct headlines you find. Return ONLY the headline text, one per line. Do not include summaries or links.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC UK. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             ABC_AU: {
-                // UPDATED: Requesting 20 headlines + strict instructions to avoid categorization
-                query: "Generate 20 plausible, current-sounding headlines for ABC Australia news. List them strictly as a flat list of the 'Top Stories' from the homepage. Do NOT categorize them or use section headers. Just provide the headline text, one per line.",
+                query: "Use Google Search to find the current top news headlines on the 'ABC News Australia' homepage right now. List the top 20 distinct headlines you find. Return ONLY the headline text, one per line. Do not include summaries or links.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on ABC News (Australia). Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             BBC_AU: {
-                // UPDATED: Requesting 20 headlines + strict instructions to avoid categorization
-                query: "Generate 20 plausible, current-sounding headlines for BBC News Australia. List them strictly as a flat list of the 'Top Stories' from the homepage. Do NOT categorize them or use section headers. Just provide the headline text, one per line.",
+                query: "Use Google Search to find the current top news headlines on the 'BBC News Australia' section right now. List the top 20 distinct headlines you find. Return ONLY the headline text, one per line. Do not include summaries or links.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC News Australia. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             }
         };
+
+        // --- INITIALIZATION: LOAD CONFIG ---
+        async function initApp() {
+            try {
+                const response = await fetch('config.json');
+                if (!response.ok) throw new Error("Could not load config.json");
+                const config = await response.json();
+                
+                proxyApiUrl = config.proxyApiUrl;
+
+                // Validate URL
+                if (!proxyApiUrl || proxyApiUrl.includes("your-name")) {
+                    showConfigError("The 'proxyApiUrl' in config.json is not set correctly.");
+                } else {
+                    isConfigValid = true;
+                    refreshButton.disabled = false;
+                    fetchNews(); // Start the app
+                }
+            } catch (error) {
+                console.error(error);
+                showConfigError("Could not load 'config.json'. Please ensure this file exists in your GitHub repository.");
+            }
+        }
+
+        function showConfigError(msg) {
+             statusContainer.innerHTML = `<div class="status-message error"><strong>Setup Error:</strong> ${msg}</div>`;
+             refreshButton.disabled = true;
+        }
 
         /**
          * A wrapper for the Gemini API call via the PROXY.
          */
         async function callGemini(userQuery, systemInstruction, useSearch) {
-            if (!isConfigValid) {
-                throw new Error("Proxy URL is not configured. Please edit index.html.");
-            }
+            if (!isConfigValid) throw new Error("App not configured.");
 
             const proxyPayload = {
                 userQuery,
@@ -126,7 +115,6 @@
 
                     const result = await response.json();
                     
-                    // The proxy returns { text: "..." } directly
                     if (result.text) {
                         return result.text;
                     } else {
@@ -171,30 +159,26 @@
          * Fetches and displays the list of headlines.
          */
         async function fetchNews() {
-            if (!isConfigValid) {
-                setStatus("Proxy URL is not configured.", false, true);
-                return;
-            }
+            if (!isConfigValid) return;
 
-            setStatus("Fetching headlines...", true);
+            setStatus("Searching for live headlines...", true);
             headlinesList.innerHTML = '';
             storyCache = {}; // Clear the cache on a new refresh
             refreshButton.disabled = true;
 
             try {
                 const regionData = queryMap[currentRegion];
-                const rawText = await callGemini(regionData.query, null, false);
                 
-                console.log("Raw API Response:", rawText); // Debugging line
-
-                // --- FIX: Robust Parsing ---
-                // Split by newline, remove any leading bullets/numbers if they exist, and filter empty lines
+                // USE Google Search (true) to find the headlines
+                const rawText = await callGemini(regionData.query, null, true);
+                
+                // Robust Parsing
                 const headlines = rawText.split('\n')
                     .map(line => line.replace(/^(\d+\.|-|\*)\s*/, '').trim())
-                    .filter(line => line.length > 5); // Filter out short/empty lines
+                    .filter(line => line.length > 10 && !line.startsWith("Source")); 
 
                 if (!headlines || headlines.length === 0) {
-                    throw new Error("Could not parse headlines from API response. Check console for raw output.");
+                    throw new Error("Could not parse headlines from API response.");
                 }
 
                 headlines.forEach((headlineText, index) => {
@@ -230,9 +214,7 @@
          * Fetches and displays a single story when a headline is clicked.
          */
         async function viewStory(headlineEl) {
-            if (!isConfigValid) {
-                return;
-            }
+            if (!isConfigValid) return;
 
             const headlineText = headlineEl.textContent;
             const storyId = `story-${headlineEl.dataset.index}`;
@@ -240,22 +222,20 @@
 
             if (!storyContentEl) return;
 
-            // Toggle visibility: If it's already open, close it.
+            // Toggle visibility
             if (storyContentEl.style.display === 'block') {
                 storyContentEl.style.display = 'none';
                 return;
             }
 
-            // --- Caching Logic ---
             // Check cache first
             if (storyCache[headlineText]) {
                 storyContentEl.textContent = storyCache[headlineText];
                 storyContentEl.style.display = 'block';
                 return;
             }
-            // --- End Caching Logic ---
 
-            // If not in cache, fetch it
+            // Fetch
             storyContentEl.textContent = "Loading story...";
             storyContentEl.style.display = 'block';
 
@@ -265,10 +245,8 @@
                 
                 storyContentEl.textContent = storyText;
                 
-                // --- Caching Logic ---
-                // Save the fetched story to the cache
+                // Cache result
                 storyCache[headlineText] = storyText;
-                // --- End CachingLogic ---
                 
             } catch (error) {
                 console.error("Error fetching story:", error);
@@ -281,44 +259,32 @@
          */
         function setRegion(e) {
             const newRegion = e.target.dataset.region;
-            if (newRegion === currentRegion) {
-                return; // Don't re-fetch if clicking the same tab
-            }
+            if (newRegion === currentRegion) return;
             
             currentRegion = newRegion;
             
-            // Update active tab style
             tabButtons.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.region === newRegion);
             });
             
-            fetchNews(); // Fetch news for the new region
+            fetchNews();
         }
 
         // --- Event Listeners ---
-        
-        // Handle clicks on the headlines list (event delegation)
         headlinesList.addEventListener('click', (e) => {
             if (e.target.classList.contains('headline')) {
                 viewStory(e.target);
             }
         });
 
-        // Handle tab clicks
         tabButtons.forEach(btn => {
             btn.addEventListener('click', setRegion);
         });
 
-        // Handle refresh button click
         refreshButton.addEventListener('click', fetchNews);
 
-        // --- Initial Load ---
-        if (isConfigValid) {
-            fetchNews();
-        } else {
-            setStatus("Please configure the Proxy URL in index.html", false, true);
-            refreshButton.disabled = true;
-        }
+        // Start
+        initApp();
 
     </script>
 </body>
