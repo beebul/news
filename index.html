@@ -10,7 +10,7 @@
 <body>
 
     <div class="container">
-        <h1>Teletext News</h1>
+        <h1>Teletext</h1>
 
         <!-- Tab Bar for regions -->
         <div class="tab-bar">
@@ -46,18 +46,16 @@
 
         const queryMap = {
             UK: {
-                // Broader query to try and force more results
-                query: "Use Google Search to find the latest news from 'BBC News UK'. Look for headlines in Top Stories, Politics, and Business sections. List as many distinct headlines as you can find (aim for 20). Return ONLY the headline text, one per line.",
+                query: "Use Google Search to find the current top news headlines on the 'BBC News UK' homepage right now. List the top 20 distinct headlines you find. Return ONLY the headline text, one per line. Do not include summaries, links, or introductory text.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC UK. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             ABC_AU: {
-                // Broader query
-                query: "Use Google Search to find the latest news from 'ABC News Australia'. Look for headlines in Top Stories, Politics, and Business sections. List as many distinct headlines as you can find (aim for 20). Return ONLY the headline text, one per line.",
+                query: "Use Google Search to find the current top news headlines on the 'ABC News Australia' homepage right now. List the top 20 distinct headlines you find. Return ONLY the headline text, one per line. Do not include summaries, links, or introductory text.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on ABC News (Australia). Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             BBC_AU: {
-                // Broader query
-                query: "Use Google Search to find the latest news from 'BBC News Australia'. Look for headlines in Top Stories, Politics, and Business sections. List as many distinct headlines as you can find (aim for 20). Return ONLY the headline text, one per line.",
+                // UPDATED: Broader query and stricter "no apology" instruction
+                query: "Use Google Search to find the latest news stories about Australia from BBC News. Look for 'BBC News Australia' specific stories as well as general World news concerning Australia. List up to 20 distinct, recent headlines. Return ONLY the headline text, one per line. Do not include introductory text, apologies, or summaries.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC News Australia. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             }
         };
@@ -178,7 +176,7 @@
                 // Robust Parsing
                 const headlines = rawText.split('\n')
                     .map(line => line.replace(/^(\d+\.|-|\*)\s*/, '').trim())
-                    .filter(line => line.length > 10 && !line.startsWith("Source")); 
+                    .filter(line => line.length > 10 && !line.startsWith("Source") && !line.includes("unable to find")); 
 
                 if (!headlines || headlines.length === 0) {
                     throw new Error("Could not parse headlines from API response.");
