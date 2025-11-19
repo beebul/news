@@ -46,15 +46,18 @@
 
         const queryMap = {
             UK: {
-                query: "Use Google Search to find the current top news headlines on the 'BBC News UK' homepage right now. List the top 20 distinct headlines you find. Return ONLY the headline text, one per line. Do not include summaries or links.",
+                // Broader query to try and force more results
+                query: "Use Google Search to find the latest news from 'BBC News UK'. Look for headlines in Top Stories, Politics, and Business sections. List as many distinct headlines as you can find (aim for 20). Return ONLY the headline text, one per line.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC UK. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             ABC_AU: {
-                query: "Use Google Search to find the current top news headlines on the 'ABC News Australia' homepage right now. List the top 20 distinct headlines you find. Return ONLY the headline text, one per line. Do not include summaries or links.",
+                // Broader query
+                query: "Use Google Search to find the latest news from 'ABC News Australia'. Look for headlines in Top Stories, Politics, and Business sections. List as many distinct headlines as you can find (aim for 20). Return ONLY the headline text, one per line.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on ABC News (Australia). Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             BBC_AU: {
-                query: "Use Google Search to find the current top news headlines on the 'BBC News Australia' section right now. List the top 20 distinct headlines you find. Return ONLY the headline text, one per line. Do not include summaries or links.",
+                // Broader query
+                query: "Use Google Search to find the latest news from 'BBC News Australia'. Look for headlines in Top Stories, Politics, and Business sections. List as many distinct headlines as you can find (aim for 20). Return ONLY the headline text, one per line.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC News Australia. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             }
         };
