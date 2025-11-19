@@ -1,6 +1,8 @@
 Teletext News Browser
 =====================
 
+https://gemini.google.com/app/4eb69f5feeb66f4c?hl=en-AU
+
 A secure, text-only news reader that mimics a classic teletext/notepad interface. It uses the **Gemini API** with **Google Search Grounding** to fetch and summarize real-time news headlines from BBC UK, ABC Australia, and BBC Australia.
 
 Features
@@ -77,3 +79,4 @@ Visit your GitHub Pages URL. The app will load, fetch the proxy URL from config.
 *   **Click a headline** to read the full AI-summarized story.
     
 *   **Click "Refresh Headlines"** to get the latest update.
+
