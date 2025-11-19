@@ -80,15 +80,15 @@
 
         const queryMap = {
             UK: {
-                query: "Generate 8 plausible, current-sounding headlines for BBC UK news.",
+                query: "Generate 8 plausible, current-sounding headlines for BBC UK news. List them strictly as a flat list of the 'Top Stories' from the homepage. Do NOT categorize them or use section headers (like 'Politics:' or 'Economy:'). Just provide the headline text, one per line.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC UK. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             ABC_AU: {
-                query: "Generate 8 plausible, current-sounding headlines for ABC Australia news.",
+                query: "Generate 8 plausible, current-sounding headlines for ABC Australia news. List them strictly as a flat list of the 'Top Stories' from the homepage. Do NOT categorize them or use section headers. Just provide the headline text, one per line.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on ABC News (Australia). Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             BBC_AU: {
-                query: "Generate 8 plausible, current-sounding headlines for BBC News Australia.",
+                query: "Generate 8 plausible, current-sounding headlines for BBC News Australia. List them strictly as a flat list of the 'Top Stories' from the homepage. Do NOT categorize them or use section headers. Just provide the headline text, one per line.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC News Australia. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             }
         };
