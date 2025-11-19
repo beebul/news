@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Text-Only News Browser</title>
+    <title>Text-Only</title>
     <!-- Link to the external stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div class="container">
-        <h1>NEWTex</h1>
+        <h1>TexTnews</h1>
 
         <!-- Tab Bar for regions -->
         <div class="tab-bar">
             <button class="tab-button active" data-region="UK">BBC UK</button>
-            <button class="tab-button" data-region="ABC_AU">ABC Aus</button>
-            <button class="tab-button" data-region="BBC_AU">BBC Aus</button>
+            <button class="tab-button" data-region="ABC_AU">ABC Australia</button>
+            <button class="tab-button" data-region="BBC_AU">BBC Australia</button>
         </div>
 
-        <button id="refresh-button">Refresh Headlines</button>
+        <button id="refresh-button">Refresh...</button>
         
         <!-- Status for loading, errors, etc. -->
         <div id="status-container"></div>
@@ -29,18 +29,54 @@
     </div>
 
     <script type="module">
-        // This is the simple, non-proxy version.
-        const apiKey = "AIzaSyALL9KBZ--RzZhdJ5h43jQGDUOIIHC0aak";
-        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        // --- CONFIGURATION ---
+        
+        // !!! IMPORTANT !!!
+        // Paste your Cloudflare Worker URL here.
+        // It will look like: https://gemini-proxy.your-name.workers.dev
+        const proxyApiUrl = "news-proxy.beebul.workers.dev";
+        
+        // --- End of Configuration ---
+
         // App state
         let currentRegion = "UK";
         let storyCache = {}; // Cache for fetched stories
+        let isConfigValid = true;
 
         // DOM Elements
         const headlinesList = document.getElementById('headlines-list');
         const statusContainer = document.getElementById('status-container');
         const refreshButton = document.getElementById('refresh-button');
         const tabButtons = document.querySelectorAll('.tab-button');
+
+        // --- CONFIGURATION CHECK ---
+        if (proxyApiUrl.includes("your-name") || proxyApiUrl === "") {
+            isConfigValid = false;
+            const errorMsg = '<strong>Configuration Error:</strong> The "proxyApiUrl" in index.html is not set. Please edit the file and add your Cloudflare Worker URL.';
+            
+            // Show a floating warning box
+            const showWarning = () => {
+                let warningBox = document.getElementById('config-warning');
+                if (!warningBox) {
+                    warningBox = document.createElement('div');
+                    warningBox.id = 'config-warning';
+                    warningBox.style.position = 'fixed';
+                    warningBox.style.top = '10px';
+                    warningBox.style.left = '50%';
+                    warningBox.style.transform = 'translateX(-50%)';
+                    warningBox.style.backgroundColor = '#fff0f0';
+                    warningBox.style.border = '1px solid #d00';
+                    warningBox.style.padding = '15px';
+                    warningBox.style.borderRadius = '5px';
+                    warningBox.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+                    warningBox.style.zIndex = '1000';
+                    warningBox.style.fontFamily = 'Segoe UI, sans-serif';
+                    warningBox.innerHTML = `${errorMsg} <button style="margin-left: 15px; border: 1px solid #ccc; background: #f0f0f0; padding: 2px 8px; border-radius: 3px; cursor: pointer;" onclick="this.parentElement.style.display=\'none\'">Close</button>`;
+                    document.body.appendChild(warningBox);
+                }
+            };
+            showWarning();
+        }
 
         const queryMap = {
             UK: {
@@ -58,216 +94,4 @@
         };
 
         /**
-         * A wrapper for the Gemini API call with retry logic.
-         */
-        async function callGemini(userQuery, systemInstruction, useSearch) {
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                ...(systemInstruction && { systemInstruction: { parts: [{ text: systemInstruction }] } }),
-                ...(useSearch && { tools: [{ "google_search": {} }] }),
-            };
-
-            let lastError = null;
-            for (let attempt = 1; attempt <= 3; attempt++) {
-                try {
-                    const response = await fetch(GEMINI_API_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`API Error: ${response.status} ${response.statusText}`);
-                    }
-
-                    const result = await response.json();
-                    const candidate = result.candidates?.[0];
-                    const text = candidate?.content?.parts?.[0]?.text;
-
-                    if (text) {
-                        return text;
-                    } else {
-                        throw new Error("Invalid API response structure.");
-                    }
-                } catch (error) {
-                    console.error(`Attempt ${attempt} failed:`, error.message);
-                    lastError = error;
-                    await new Promise(res => setTimeout(res, 1000 * attempt)); // Exponential backoff
-                }
-            }
-            throw new Error(`Failed to call Gemini API after 3 attempts: ${lastError.message}`);
-        }
-
-        /**
-         * Sets the status message, with an optional spinner.
-         */
-        function setStatus(message, isLoading = false, isError = false) {
-            statusContainer.innerHTML = ''; // Clear previous status
-            if (message) {
-                const statusMessage = document.createElement('div');
-                statusMessage.className = 'status-message';
-                if (isError) {
-                    statusMessage.classList.add('error');
-                }
-
-                if (isLoading) {
-                    const spinner = document.createElement('div');
-                    spinner.className = 'loading-spinner';
-                    statusMessage.appendChild(spinner);
-                }
-                
-                const textNode = document.createElement('span');
-                textNode.textContent = message;
-                statusMessage.appendChild(textNode);
-                
-                statusContainer.appendChild(statusMessage);
-            }
-        }
-
-        /**
-         * Fetches and displays the list of headlines.
-         */
-        async function fetchNews() {
-            setStatus("Fetching headlines...", true);
-            headlinesList.innerHTML = '';
-            storyCache = {}; // Clear the cache on a new refresh
-            refreshButton.disabled = true;
-
-            try {
-                const regionData = queryMap[currentRegion];
-                const rawText = await callGemini(regionData.query, null, false);
-                
-                // Parse headlines (assuming they are numbered or bulleted)
-                const headlines = rawText.match(/(\d+\.|-|\*)\s*(.*)/g)
-                    ?.map(line => line.replace(/(\d+\.|-K)\s*/, '').trim()) // Fixed a typo here (K was K instead of *)
-                    .filter(line => line.length > 5); // Filter out short lines
-
-                if (!headlines || headlines.length === 0) {
-                    throw new Error("Could not parse headlines from API response.");
-                }
-
-                headlines.forEach((headlineText, index) => {
-                    const item = document.createElement('div');
-                    item.className = 'headline-item';
-                    
-                    const headlineEl = document.createElement('div');
-                    headlineEl.className = 'headline';
-                    headlineEl.textContent = headlineText;
-                    headlineEl.dataset.index = index;
-                    
-                    const storyContentEl = document.createElement('div');
-                    storyContentEl.className = 'story-content';
-                    storyContentEl.id = `story-${index}`;
-                    
-                    item.appendChild(headlineEl);
-                    item.appendChild(storyContentEl);
-                    headlinesList.appendChild(item);
-                });
-
-                setStatus(""); // Clear loading status
-            } catch (error) {
-                console.error("Error fetching headlines:", error);
-                setStatus(`Error fetching headlines: ${error.message}`, false, true);
-            } finally {
-                refreshButton.disabled = false;
-            }
-        }
-
-        /**
-         * Fetches and displays a single story when a headline is clicked.
-         */
-        async function viewStory(headlineEl) {
-            const headlineText = headlineEl.textContent;
-            const storyId = `story-${headlineEl.dataset.index}`;
-            const storyContentEl = document.getElementById(storyId);
-
-            if (!storyContentEl) return;
-
-            // Toggle visibility: If it's already open, close it.
-            if (storyContentEl.style.display === 'block') {
-                storyContentEl.style.display = 'none';
-                return;
-            }
-
-            // --- Caching Logic ---
-            // Check cache first
-            if (storyCache[headlineText]) {
-                storyContentEl.textContent = storyCache[headlineText];
-                storyContentEl.style.display = 'block';
-                return;
-            }
-            // --- End Caching Logic ---
-
-            // If not in cache, fetch it
-            storyContentEl.textContent = "Loading story...";
-            storyContentEl.style.display = 'block';
-
-            try {
-                const regionData = queryMap[currentRegion];
-                const storyText = await callGemini(headlineText, regionData.storySystem, true);
-                
-                storyContentEl.textContent = storyText;
-                
-                // --- Caching Logic ---
-                // Save the fetched story to the cache
-                storyCache[headlineText] = storyText;
-                // --- End CachingLogic ---
-                
-            } catch (error) {
-                console.error("Error fetching story:", error);
-                storyContentEl.textContent = `Error loading story: ${error.message}`;
-            }
-        }
-
-        /**
-         * Changes the active region and fetches new news.
-         */
-        function setRegion(e) {
-            const newRegion = e.target.dataset.region;
-            if (newRegion === currentRegion) {
-                return; // Don't re-fetch if clicking the same tab
-            }
-            
-            currentRegion = newRegion;
-            
-            // Update active tab style
-            tabButtons.forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.region === newRegion);
-            });
-            
-            fetchNews(); // Fetch news for the new region
-        }
-
-        // --- Event Listeners ---
-        
-        // Handle clicks on the headlines list (event delegation)
-        headlinesList.addEventListener('click', (e) => {
-            if (e.target.classList.contains('headline')) {
-                viewStory(e.target);
-            }
-        });
-
-        // Handle tab clicks
-        tabButtons.forEach(btn => {
-            btn.addEventListener('click', setRegion);
-        });
-
-        // Handle refresh button click
-        refreshButton.addEventListener('click', fetchNews);
-
-        // --- Initial Load ---
-        // Check API Key and fetch news on load
-        if (apiKey && apiKey !== "PASTE_YOUR_GEMINI_API_KEY_HERE") {
-            fetchNews();
-        } else {
-            setStatus("Please add your Gemini API key to index.html to begin.", false, true);
-            refreshButton.disabled = true;
-        }
-
-    </script>
-</body>
-</html>
-
-
-
-
+         *
