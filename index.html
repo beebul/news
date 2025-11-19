@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teletext News</title>
+    <title>Teletext</title>
     <!-- Link to the external stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div class="container">
-        <h1>Teletext</h1>
+        <h1>Teletext (no garbage)</h1>
 
         <!-- Tab Bar for regions -->
         <div class="tab-bar">
@@ -36,12 +36,7 @@
 
         // --- APP STATE ---
         let currentRegion = "UK";
-        
-        // storyCache: Stores full text of stories (session only)
         let storyCache = {}; 
-        
-        // headlineCache: Stores lists of headlines (persisted to localStorage)
-        // Structure: { "UK": { timestamp: 12345, html: "..." }, ... }
         let headlineCache = JSON.parse(localStorage.getItem('teletext_headlines') || '{}');
 
         // --- DOM ELEMENTS ---
@@ -52,15 +47,15 @@
 
         const queryMap = {
             UK: {
-                query: "Use Google Search to find the current top news headlines on the 'BBC News UK' homepage right now. List the top 20 distinct headlines you find. Return ONLY the headline text, one per line. Do not include summaries, links, or introductory text.",
+                query: "Use Google Search to find the latest news from 'BBC News UK'. Scan the Top Stories, Politics, Business, Technology, and Entertainment sections. Compile a list of 20 distinct, current headlines. Return ONLY the headline text, one per line. Ensure you find at least 15 items.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC UK. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             ABC_AU: {
-                query: "Use Google Search to find the current top news headlines on the 'ABC News Australia' homepage right now. List the top 20 distinct headlines you find. Return ONLY the headline text, one per line. Do not include summaries, links, or introductory text.",
+                query: "Use Google Search to find the latest news from 'ABC News Australia'. Scan Top Stories, Just In, Politics, and Business. Compile a list of 20 distinct, current headlines. Return ONLY the headline text, one per line. Ensure you find at least 15 items.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on ABC News (Australia). Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             BBC_AU: {
-                query: "Use Google Search to find the latest news stories about Australia from BBC News. Look for 'BBC News Australia' specific stories as well as general World news concerning Australia. List up to 20 distinct, recent headlines. Return ONLY the headline text, one per line. Do not include introductory text, apologies, or summaries.",
+                query: "Use Google Search to find the latest news from BBC News regarding Australia. Look for stories in the 'Australia' section, but also check World News, Business, and Sport for Australian topics. Compile a list of 20 distinct headlines. Return ONLY the headline text, one per line.",
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC News Australia. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             }
         };
@@ -69,7 +64,7 @@
         async function initApp() {
             try {
                 const response = await fetch('config.json');
-                if (!response.ok) throw new Error("Could not load config.json");
+                if (!response.ok) throw new Error("config.json not found");
                 const config = await response.json();
                 
                 proxyApiUrl = config.proxyApiUrl;
@@ -80,14 +75,13 @@
                     isConfigValid = true;
                     refreshButton.disabled = false;
                     
-                    // Try to load from cache first, otherwise fetch
                     if (!loadHeadlinesFromCache(currentRegion)) {
                         fetchNews(false); 
                     }
                 }
             } catch (error) {
-                console.error(error);
-                showConfigError("Could not load 'config.json'.");
+                console.warn("Config load failed:", error);
+                showConfigInputUI();
             }
         }
 
@@ -96,26 +90,38 @@
              refreshButton.disabled = true;
         }
 
+        function showConfigInputUI() {
+            statusContainer.innerHTML = `
+                <div class="status-message error" style="flex-direction: column; align-items: flex-start;">
+                    <strong>Config Missing:</strong> Please create 'config.json' or enter your Cloudflare URL below to test:<br>
+                    <input type="text" id="manual-url" placeholder="https://news-proxy.name.workers.dev" style="width: 100%; margin-top: 5px; padding: 5px;">
+                    <button onclick="window.setManualUrl()" style="margin-top: 5px; cursor: pointer;">Set URL</button>
+                </div>`;
+            
+            window.setManualUrl = () => {
+                const url = document.getElementById('manual-url').value.trim();
+                if (url) {
+                    proxyApiUrl = url;
+                    isConfigValid = true;
+                    refreshButton.disabled = false;
+                    statusContainer.innerHTML = '';
+                    fetchNews(false);
+                }
+            };
+        }
+
         // --- CACHING FUNCTIONS ---
         function loadHeadlinesFromCache(region) {
             const cached = headlineCache[region];
             const now = Date.now();
-
-            // If cache exists and is younger than 10 minutes
             if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
-                console.log(`Restoring ${region} from cache`);
                 headlinesList.innerHTML = cached.html;
-                
-                // Re-attach event listeners to the new HTML elements
                 const newHeadlines = headlinesList.querySelectorAll('.headline');
                 newHeadlines.forEach((hl, index) => {
-                     // Reconstruct click handlers
                      hl.onclick = () => viewStory(hl, document.getElementById(`story-${index}`));
                 });
-                
-                // Show a subtle "Cached" message
                 const minutesOld = Math.floor((now - cached.timestamp) / 60000);
-                setStatus(`Updated ${minutesOld} min ago`, false);
+                setStatus(`Updated ${minutesOld} min ago (${newHeadlines.length} stories)`, false);
                 return true;
             }
             return false;
@@ -132,7 +138,6 @@
         // --- API CALLER ---
         async function callGemini(userQuery, systemInstruction, useSearch) {
             if (!isConfigValid) throw new Error("App not configured.");
-
             const proxyPayload = {
                 userQuery,
                 systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : null,
@@ -147,19 +152,13 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(proxyPayload)
                     });
-
                     if (!response.ok) {
                         const errorBody = await response.text();
                         throw new Error(`Proxy Error: ${response.status} ${response.statusText} - ${errorBody}`);
                     }
-
                     const result = await response.json();
-                    
-                    if (result.text) {
-                        return result.text;
-                    } else {
-                        throw new Error("Invalid proxy response structure.");
-                    }
+                    if (result.text) return result.text;
+                    else throw new Error("Invalid proxy response structure.");
                 } catch (error) {
                     console.error(`Attempt ${attempt} failed:`, error.message);
                     lastError = error;
@@ -175,17 +174,14 @@
                 const statusMessage = document.createElement('div');
                 statusMessage.className = 'status-message';
                 if (isError) statusMessage.classList.add('error');
-
                 if (isLoading) {
                     const spinner = document.createElement('div');
                     spinner.className = 'loading-spinner';
                     statusMessage.appendChild(spinner);
                 }
-                
                 const textNode = document.createElement('span');
                 textNode.textContent = message;
                 statusMessage.appendChild(textNode);
-                
                 statusContainer.appendChild(statusMessage);
             }
         }
@@ -193,11 +189,7 @@
         // --- FETCH HEADLINES ---
         async function fetchNews(forceRefresh = false) {
             if (!isConfigValid) return;
-
-            // If switching tabs, try cache first (unless forced)
-            if (!forceRefresh && loadHeadlinesFromCache(currentRegion)) {
-                return;
-            }
+            if (!forceRefresh && loadHeadlinesFromCache(currentRegion)) return;
 
             setStatus("Searching for live headlines...", true);
             headlinesList.innerHTML = '';
@@ -207,40 +199,46 @@
                 const regionData = queryMap[currentRegion];
                 const rawText = await callGemini(regionData.query, null, true);
                 
-                // Parsing logic
+                // --- GARBAGE FILTER ---
+                // Identify words/patterns that indicate the AI is chatting, not listing headlines.
+                const blocklist = [
+                    "google search", "unable to", "limited number", "distinct", 
+                    "found:", "following is", "apologies", "sorry", "non-bbc", 
+                    "sourced", "headlines found", "search results", "please note"
+                ];
+
                 const headlines = rawText.split('\n')
-                    .map(line => line.replace(/^(\d+\.|-|\*)\s*/, '').trim())
-                    .filter(line => line.length > 10 && !line.startsWith("Source") && !line.includes("unable to find")); 
+                    .map(line => line.replace(/^(\d+\.|-|\*)\s*/, '').trim()) // Remove bullets
+                    .filter(line => {
+                        if (line.length < 10) return false; // Too short
+                        const lower = line.toLowerCase();
+                        // Check if line contains any blocklisted phrase
+                        if (blocklist.some(phrase => lower.includes(phrase))) return false;
+                        // Check if line ends with a colon (intro text)
+                        if (line.endsWith(':')) return false;
+                        return true;
+                    }); 
 
-                if (!headlines || headlines.length === 0) {
-                    throw new Error("Could not parse headlines from API response.");
-                }
+                if (!headlines || headlines.length === 0) throw new Error("Could not parse headlines from API response.");
 
-                // Generate HTML
                 headlines.forEach((headlineText, index) => {
                     const item = document.createElement('div');
                     item.className = 'headline-item';
-                    
                     const headlineEl = document.createElement('div');
                     headlineEl.className = 'headline';
                     headlineEl.textContent = headlineText;
                     headlineEl.dataset.index = index;
-                    
                     const storyContentEl = document.createElement('div');
                     storyContentEl.className = 'story-content';
                     storyContentEl.id = `story-${index}`;
-                    
                     headlineEl.onclick = () => viewStory(headlineEl, storyContentEl);
-                    
                     item.appendChild(headlineEl);
                     item.appendChild(storyContentEl);
                     headlinesList.appendChild(item);
                 });
 
-                // Save generated HTML to cache
                 saveHeadlinesToCache(currentRegion, headlinesList.innerHTML);
-                setStatus("Updated just now", false);
-
+                setStatus(`Updated just now (${headlines.length} stories)`, false);
             } catch (error) {
                 console.error("Error fetching headlines:", error);
                 setStatus(`Error: ${error.message}`, false, true);
@@ -252,64 +250,50 @@
         // --- VIEW STORY ---
         async function viewStory(headlineEl, storyContentEl) {
             if (!isConfigValid || !storyContentEl) return;
-
             const headlineText = headlineEl.textContent;
 
-            // Toggle visibility
             if (storyContentEl.style.display === 'block') {
                 storyContentEl.style.display = 'none';
                 return;
             }
 
-            // Check story cache (session memory)
             if (storyCache[headlineText]) {
                 storyContentEl.textContent = storyCache[headlineText];
                 storyContentEl.style.display = 'block';
                 return;
             }
 
-            // Fetch
             storyContentEl.textContent = "Loading story...";
             storyContentEl.style.display = 'block';
 
             try {
                 const regionData = queryMap[currentRegion];
                 const storyText = await callGemini(headlineText, regionData.storySystem, true);
-                
                 storyContentEl.textContent = storyText;
-                storyCache[headlineText] = storyText; // Cache result
-                
+                storyCache[headlineText] = storyText; 
             } catch (error) {
                 console.error("Error fetching story:", error);
                 storyContentEl.textContent = `Error loading story: ${error.message}`;
             }
         }
 
-        // --- NAVIGATION ---
         function setRegion(e) {
             const newRegion = e.target.dataset.region;
             if (newRegion === currentRegion) return;
-            
             currentRegion = newRegion;
-            
             tabButtons.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.region === newRegion);
             });
-            
-            // Fetch (allows cache usage)
             fetchNews(false);
         }
 
-        // --- EVENT LISTENERS ---
         tabButtons.forEach(btn => {
             btn.addEventListener('click', setRegion);
         });
 
-        // Refresh button forces a network call (bypass cache)
         refreshButton.addEventListener('click', () => fetchNews(true));
 
         initApp();
     </script>
 </body>
 </html>
-
