@@ -1,58 +1,140 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Notepad Theme Mockup</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div class="container">
-        <h1>*** TELETEXT NEWS SYSTEM v1.0 ***</h1>
+/* * Styles for the Text-Only News Browser
+ * STYLE 1: Standard Notepad (Blue Links)
+ */
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
+    background-color: #ffffff;
+    color: #000000;
+    padding: 10px 20px;
+    margin: 0;
+}
 
-        <!-- Tabs looking like text commands -->
-        <div class="tab-bar">
-            <button class="tab-button active">BBC UK</button>
-            <button class="tab-button">ABC Australia</button>
-            <button class="tab-button">BBC Australia</button>
-        </div>
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+}
 
-        <button id="refresh-button">COMMAND: REFRESH_DATA</button>
+h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #333;
+}
 
-        <div class="status-message">
-            System: Connection established. 20 records retrieved.
-        </div>
+/* Tab Bar */
+.tab-bar {
+    display: flex;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 15px;
+}
 
-        <div id="headlines-list">
-            <!-- Mockup Item 1 -->
-            <div class="headline-item">
-                <div class="headline">1. Govt announces new digital infrastructure plan for rural areas</div>
-            </div>
+.tab-button {
+    background: none;
+    border: none;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 16px;
+    font-family: 'Segoe UI', sans-serif;
+    color: #555;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+}
 
-            <!-- Mockup Item 2 (Open) -->
-            <div class="headline-item">
-                <div class="headline">2. Markets react to latest inflation figures as trading opens</div>
-                <div class="story-content" style="display: block;">
-DATA RETRIEVED: 10:42 AM
-SOURCE: BBC FINANCE
+.tab-button.active {
+    color: #000;
+    border-bottom: 2px solid #0078d4; /* Windows blue */
+    font-weight: 600;
+}
 
-London markets have opened cautiously this morning following the release of the latest inflation figures, which showed a slight uptick to 3.1%. 
+.tab-button:hover {
+    background-color: #f0f0f0;
+}
 
-Analysts suggest that while the rise was expected due to energy price fluctuations, it may delay any potential interest rate cuts by the Bank of England. 
+/* Main Button */
+#refresh-button {
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    padding: 5px 15px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-bottom: 15px;
+    font-family: 'Segoe UI', sans-serif;
+}
 
-The FTSE 100 dipped 0.4% in early trading, with retail stocks taking the biggest hit as consumer confidence remains fragile.
-                </div>
-            </div>
+#refresh-button:hover {
+    background-color: #e6e6e6;
+    border-color: #bbb;
+}
 
-            <!-- Mockup Item 3 -->
-            <div class="headline-item">
-                <div class="headline">3. Rare comet visible tonight: How to see it from the UK</div>
-            </div>
+#refresh-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #f0f0f0;
+    border-color: #ccc;
+}
 
-            <!-- Mockup Item 4 -->
-            <div class="headline-item">
-                <div class="headline">4. Sports update: England team selection announced for upcoming test</div>
-            </div>
-        </div>
-    </div>
-</body>
-</html>
+/* Status Messages & Loading */
+.status-message {
+    margin: 15px 0;
+    font-style: italic;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.status-message.error {
+    color: #d00000;
+    font-style: normal;
+    font-weight: bold;
+    white-space: normal; 
+    word-wrap: break-word;
+}
+
+.loading-spinner {
+    border: 3px solid #f0f0f0;
+    border-top: 3px solid #0078d4;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Headlines & Story */
+.headline-item {
+    margin-bottom: 5px;
+}
+
+/* STANDARD STYLE: Blue links */
+.headline {
+    font-size: 16px;
+    color: #0078d4; /* Blue */
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.headline:hover {
+    color: #005a9e; /* Darker blue on hover */
+}
+
+.story-content {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 14px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background-color: #ffffff;
+    border: none;
+    padding: 10px 0 10px 5px;
+    margin-top: 5px;
+    display: none;
+    color: #111;
+}
