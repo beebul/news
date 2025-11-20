@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teletext Deals</title>
-    <!-- Reuse the existing style.css so it matches the News app -->
     <link rel="stylesheet" href="style.css"> 
 </head>
 <body>
@@ -12,7 +11,6 @@
     <div class="container">
         <h1>Teletext Deals: OzBargain</h1>
 
-        <!-- Tab Bar for Deal Categories -->
         <div class="tab-bar">
             <button class="tab-button active" data-region="TOP">Top Deals</button>
             <button class="tab-button" data-region="NEW">New Deals (Live)</button>
@@ -22,7 +20,6 @@
         <button id="refresh-button">Refresh Deals</button>
         
         <div id="status-container"></div>
-        
         <div id="headlines-list"></div>
     </div>
 
@@ -30,7 +27,6 @@
         // --- CONFIGURATION ---
         let proxyApiUrl = "";
         let isConfigValid = false;
-        // 2 Minutes Cache for Deals (they expire fast)
         const CACHE_DURATION_MS = 1000 * 60 * 2; 
 
         // --- APP STATE ---
@@ -38,31 +34,25 @@
         let storyCache = {}; 
         let headlineCache = JSON.parse(localStorage.getItem('teletext_deals') || '{}');
 
-        // --- DOM ELEMENTS ---
         const headlinesList = document.getElementById('headlines-list');
         const statusContainer = document.getElementById('status-container');
         const refreshButton = document.getElementById('refresh-button');
         const tabButtons = document.querySelectorAll('.tab-button');
 
-        // --- PROMPT ENGINEERING ---
         const queryMap = {
             TOP: {
-                // Strategy: RSS FEED (Popular Deals)
                 targetUrl: "https://www.ozbargain.com.au/deals/feed",
                 query: "You have been provided with the raw RSS feed data for 'Popular Deals' from OzBargain in the Context Data. Parse this XML/RSS data. Extract the titles of the top 20 deals. Format each line strictly as: 'Item Name'. Do not use markdown formatting. Return ONLY the list, one per line.",
                 useSearch: false,
                 storySystem: "You are a deal hunter. The user will provide a deal title. Find the details of this specific deal on OzBargain using Google Search. Summarize the following: 1) The Price, 2) The Retailer, 3) The Coupon Code (if any), 4) The Expiry Date, and 5) A brief description of why it is a good deal (or key comments/warnings from users). Format as a clean, plain-text memo."
             },
             NEW: {
-                // Strategy: RSS FEED (Live Firehose)
                 targetUrl: "https://www.ozbargain.com.au/feed/new",
                 query: "You have been provided with the raw RSS feed data from OzBargain in the Context Data. Parse this XML/RSS data. Extract the titles of the 20 most recent items. Format each line strictly as: 'Item Name'. Do not use markdown formatting like bold or italics. Return ONLY the list, one per line.",
                 useSearch: false, 
                 storySystem: "You are a deal hunter. Summarize this deal from OzBargain using Google Search."
             },
             FREE: {
-                // Strategy: RSS FEED (Freebies Category)
-                // UPDATED: Switched from Search to RSS for instant loading
                 targetUrl: "https://www.ozbargain.com.au/cat/freebies/feed",
                 query: "You have been provided with the raw RSS feed data for 'Freebies' from OzBargain in the Context Data. Parse this XML/RSS data. Extract the titles of the top 20 freebie items. Format each line strictly as: 'Item Name'. Do not use markdown formatting. Return ONLY the list, one per line.",
                 useSearch: false,
@@ -73,7 +63,6 @@
         // --- INITIALIZATION ---
         async function initApp() {
             try {
-                // Reuses the SAME config file as your news app
                 const response = await fetch('config.json');
                 if (!response.ok) throw new Error("config.json not found");
                 const config = await response.json();
@@ -84,9 +73,16 @@
                 } else {
                     isConfigValid = true;
                     refreshButton.disabled = false;
-                    if (!loadHeadlinesFromCache(currentRegion)) {
-                        fetchNews(false); 
-                    }
+
+                    // 1. Load active region
+                    fetchNews(currentRegion);
+
+                    // 2. Pre-fetch others
+                    Object.keys(queryMap).forEach(region => {
+                        if (region !== currentRegion) {
+                            fetchNews(region);
+                        }
+                    });
                 }
             } catch (error) {
                 console.warn("Config load failed:", error);
@@ -106,7 +102,6 @@
                     <input type="text" id="manual-url" placeholder="https://..." style="width: 100%; margin-top: 5px; padding: 5px;">
                     <button onclick="window.setManualUrl()" style="margin-top: 5px; cursor: pointer;">Set URL</button>
                 </div>`;
-            
             window.setManualUrl = () => {
                 const url = document.getElementById('manual-url').value.trim();
                 if (url) {
@@ -114,23 +109,28 @@
                     isConfigValid = true;
                     refreshButton.disabled = false;
                     statusContainer.innerHTML = '';
-                    fetchNews(false);
+                    Object.keys(queryMap).forEach(region => fetchNews(region));
                 }
             };
         }
 
-        // --- CACHING FUNCTIONS ---
+        // --- CACHING & RENDERING ---
         function loadHeadlinesFromCache(region) {
             const cached = headlineCache[region];
             const now = Date.now();
-            if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
-                headlinesList.innerHTML = cached.html;
-                const newHeadlines = headlinesList.querySelectorAll('.headline');
-                newHeadlines.forEach((hl, index) => {
-                     hl.onclick = () => viewStory(hl, document.getElementById(`story-${index}`));
-                });
-                setStatus(`Updated recently`, false);
-                return true;
+            
+            if (region === currentRegion) {
+                if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
+                    headlinesList.innerHTML = cached.html;
+                    const newHeadlines = headlinesList.querySelectorAll('.headline');
+                    newHeadlines.forEach((hl, index) => {
+                         hl.onclick = () => viewStory(hl, document.getElementById(`story-${index}`));
+                    });
+                    setStatus(`Updated recently`, false);
+                    return true;
+                }
+            } else {
+                if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) return true;
             }
             return false;
         }
@@ -146,12 +146,11 @@
         // --- API CALLER ---
         async function callGemini(userQuery, systemInstruction, useSearch, targetUrl = null) {
             if (!isConfigValid) throw new Error("App not configured.");
-            
             const proxyPayload = {
                 userQuery,
                 systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : null,
                 tools: useSearch ? [{ "google_search": {} }] : null,
-                targetUrl: targetUrl // Send the RSS URL if we have one
+                targetUrl: targetUrl 
             };
 
             let lastError = null;
@@ -164,18 +163,18 @@
                     });
                     if (!response.ok) {
                         const errorBody = await response.text();
-                        throw new Error(`Proxy Error: ${response.status} ${response.statusText} - ${errorBody}`);
+                        throw new Error(`Proxy Error: ${response.status} - ${errorBody}`);
                     }
                     const result = await response.json();
                     if (result.text) return result.text;
-                    else throw new Error("Invalid proxy response structure.");
+                    else throw new Error("Invalid proxy response.");
                 } catch (error) {
                     console.error(`Attempt ${attempt} failed:`, error.message);
                     lastError = error;
                     await new Promise(res => setTimeout(res, 1000 * attempt)); 
                 }
             }
-            throw new Error(`Failed to call proxy after 3 attempts: ${lastError.message}`);
+            throw new Error(`Failed to call proxy: ${lastError.message}`);
         }
 
         function setStatus(message, isLoading = false, isError = false) {
@@ -197,18 +196,19 @@
         }
 
         // --- FETCH HEADLINES ---
-        async function fetchNews(forceRefresh = false) {
+        async function fetchNews(region = currentRegion, forceRefresh = false) {
             if (!isConfigValid) return;
-            if (!forceRefresh && loadHeadlinesFromCache(currentRegion)) return;
 
-            setStatus("Searching Deals...", true);
-            headlinesList.innerHTML = '';
-            refreshButton.disabled = true;
+            if (!forceRefresh && loadHeadlinesFromCache(region)) return;
+
+            if (region === currentRegion) {
+                setStatus("Searching Deals...", true);
+                headlinesList.innerHTML = '';
+                refreshButton.disabled = true;
+            }
 
             try {
-                const regionData = queryMap[currentRegion];
-                
-                // Call Gemini with the specific strategy for this region
+                const regionData = queryMap[region];
                 const rawText = await callGemini(
                     regionData.query, 
                     null, 
@@ -216,36 +216,33 @@
                     regionData.targetUrl
                 );
                 
-                // Parsing logic
                 const headlines = rawText.split('\n')
                     .map(line => line.replace(/^(\d+\.|-|\*)\s*/, '').trim())
                     .filter(line => line.length > 5 && !line.startsWith("Source") && !line.includes("unable to")); 
 
                 if (!headlines || headlines.length === 0) throw new Error("Could not find deals.");
 
+                let htmlBuffer = "";
                 headlines.forEach((headlineText, index) => {
-                    const item = document.createElement('div');
-                    item.className = 'headline-item';
-                    const headlineEl = document.createElement('div');
-                    headlineEl.className = 'headline';
-                    headlineEl.textContent = headlineText;
-                    headlineEl.dataset.index = index;
-                    const storyContentEl = document.createElement('div');
-                    storyContentEl.className = 'story-content';
-                    storyContentEl.id = `story-${index}`;
-                    headlineEl.onclick = () => viewStory(headlineEl, storyContentEl);
-                    item.appendChild(headlineEl);
-                    item.appendChild(storyContentEl);
-                    headlinesList.appendChild(item);
+                    htmlBuffer += `
+                        <div class="headline-item">
+                            <div class="headline" data-index="${index}">${headlineText}</div>
+                            <div class="story-content" id="story-${index}"></div>
+                        </div>`;
                 });
 
-                saveHeadlinesToCache(currentRegion, headlinesList.innerHTML);
-                setStatus(`Updated just now`, false);
+                saveHeadlinesToCache(region, htmlBuffer);
+
+                if (region === currentRegion) {
+                    loadHeadlinesFromCache(region);
+                    refreshButton.disabled = false;
+                }
             } catch (error) {
-                console.error("Error fetching deals:", error);
-                setStatus(`Error: ${error.message}`, false, true);
-            } finally {
-                refreshButton.disabled = false;
+                console.error(`Error fetching ${region}:`, error);
+                if (region === currentRegion) {
+                    setStatus(`Error: ${error.message}`, false, true);
+                    refreshButton.disabled = false;
+                }
             }
         }
 
@@ -270,7 +267,6 @@
 
             try {
                 const regionData = queryMap[currentRegion];
-                // Note: We always use search to get details of a specific deal
                 const storyText = await callGemini(headlineText, regionData.storySystem, true);
                 storyContentEl.textContent = storyText;
                 storyCache[headlineText] = storyText; 
@@ -287,14 +283,14 @@
             tabButtons.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.region === newRegion);
             });
-            fetchNews(false);
+            fetchNews(newRegion, false);
         }
 
         tabButtons.forEach(btn => {
             btn.addEventListener('click', setRegion);
         });
 
-        refreshButton.addEventListener('click', () => fetchNews(true));
+        refreshButton.addEventListener('click', () => fetchNews(currentRegion, true));
 
         initApp();
     </script>
