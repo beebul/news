@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teletext</title>
+    <title>Teletext News</title>
     <!-- Link to the external stylesheet -->
-    <link rel="stylesheet" href="style2.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div class="container">
-        <h1>Teletext</h1>
+        <h1>Teletext News</h1>
 
         <!-- Tab Bar for regions -->
         <div class="tab-bar">
@@ -19,7 +19,7 @@
             <button class="tab-button" data-region="BBC_AU">BBC Australia</button>
         </div>
 
-        <button id="refresh-button">Refresh</button>
+        <button id="refresh-button">Refresh Headlines</button>
         
         <!-- Status for loading, errors, etc. -->
         <div id="status-container"></div>
@@ -45,17 +45,27 @@
         const refreshButton = document.getElementById('refresh-button');
         const tabButtons = document.querySelectorAll('.tab-button');
 
+        // --- HYBRID ENGINE CONFIGURATION ---
         const queryMap = {
             UK: {
-                query: "Use Google Search to find the latest news from 'BBC News UK'. Scan the Top Stories, Politics, Business, Technology, and Entertainment sections. Compile a list of 20 distinct, current headlines. Return ONLY the headline text, one per line. Ensure you find at least 15 items.",
+                // STRATEGY: RSS FEED (Direct & Fast)
+                targetUrl: "http://feeds.bbci.co.uk/news/rss.xml",
+                query: "You have been provided with the raw RSS feed data from BBC News in the Context Data. Parse this XML data. Extract the titles of the top 20 news items. Do NOT include 'BBC News' in the title. Return ONLY the clean headline text, one per line.",
+                useSearch: false,
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC UK. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             ABC_AU: {
-                query: "Use Google Search to find the latest news from 'ABC News Australia'. Scan Top Stories, Just In, Politics, and Business. Compile a list of 20 distinct, current headlines. Return ONLY the headline text, one per line. Ensure you find at least 15 items.",
+                // STRATEGY: RSS FEED (Direct & Fast)
+                targetUrl: "https://www.abc.net.au/news/feed/51120/rss.xml", // ABC Top Stories
+                query: "You have been provided with the raw RSS feed data from ABC News Australia in the Context Data. Parse this XML data. Extract the titles of the top 20 news items. Return ONLY the clean headline text, one per line.",
+                useSearch: false,
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on ABC News (Australia). Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
             BBC_AU: {
-                query: "Use Google Search to find the latest news from BBC News regarding Australia. Look for stories in the 'Australia' section, but also check World News, Business, and Sport for Australian topics. Compile a list of 20 distinct headlines. Return ONLY the headline text, one per line.",
+                // STRATEGY: RSS FEED (Direct & Fast)
+                targetUrl: "http://feeds.bbci.co.uk/news/world/australia/rss.xml",
+                query: "You have been provided with the raw RSS feed data from BBC News (Australia Section) in the Context Data. Parse this XML data. Extract the titles of the top 20 news items. Return ONLY the clean headline text, one per line.",
+                useSearch: false,
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on BBC News Australia. Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             }
         };
@@ -135,13 +145,15 @@
             localStorage.setItem('teletext_headlines', JSON.stringify(headlineCache));
         }
 
-        // --- API CALLER ---
-        async function callGemini(userQuery, systemInstruction, useSearch) {
+        // --- API CALLER (Enhanced with targetUrl) ---
+        async function callGemini(userQuery, systemInstruction, useSearch, targetUrl = null) {
             if (!isConfigValid) throw new Error("App not configured.");
+            
             const proxyPayload = {
                 userQuery,
                 systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : null,
-                tools: useSearch ? [{ "google_search": {} }] : null
+                tools: useSearch ? [{ "google_search": {} }] : null,
+                targetUrl: targetUrl // NEW: Pass the RSS feed URL to the proxy
             };
 
             let lastError = null;
@@ -191,33 +203,25 @@
             if (!isConfigValid) return;
             if (!forceRefresh && loadHeadlinesFromCache(currentRegion)) return;
 
-            setStatus("Searching for live headlines...", true);
+            setStatus("Accessing News Feed...", true);
             headlinesList.innerHTML = '';
             refreshButton.disabled = true;
 
             try {
                 const regionData = queryMap[currentRegion];
-                const rawText = await callGemini(regionData.query, null, true);
                 
-                // --- GARBAGE FILTER ---
-                // Identify words/patterns that indicate the AI is chatting, not listing headlines.
-                const blocklist = [
-                    "google search", "unable to", "limited number", "distinct", 
-                    "found:", "following is", "apologies", "sorry", "non-bbc", 
-                    "sourced", "headlines found", "search results", "please note"
-                ];
-
+                // Call Gemini with the specific strategy (RSS URL)
+                const rawText = await callGemini(
+                    regionData.query, 
+                    null, 
+                    regionData.useSearch, 
+                    regionData.targetUrl
+                );
+                
+                // Robust Parsing
                 const headlines = rawText.split('\n')
-                    .map(line => line.replace(/^(\d+\.|-|\*)\s*/, '').trim()) // Remove bullets
-                    .filter(line => {
-                        if (line.length < 10) return false; // Too short
-                        const lower = line.toLowerCase();
-                        // Check if line contains any blocklisted phrase
-                        if (blocklist.some(phrase => lower.includes(phrase))) return false;
-                        // Check if line ends with a colon (intro text)
-                        if (line.endsWith(':')) return false;
-                        return true;
-                    }); 
+                    .map(line => line.replace(/^(\d+\.|-|\*)\s*/, '').trim())
+                    .filter(line => line.length > 5 && !line.startsWith("Source") && !line.includes("unable to")); 
 
                 if (!headlines || headlines.length === 0) throw new Error("Could not parse headlines from API response.");
 
@@ -238,7 +242,7 @@
                 });
 
                 saveHeadlinesToCache(currentRegion, headlinesList.innerHTML);
-                setStatus(`Updated just now (${headlines.length} stories)`, false);
+                setStatus(`Updated just now`, false);
             } catch (error) {
                 console.error("Error fetching headlines:", error);
                 setStatus(`Error: ${error.message}`, false, true);
@@ -268,6 +272,8 @@
 
             try {
                 const regionData = queryMap[currentRegion];
+                // Note: We still use Google Search for the STORY CONTENT
+                // because RSS feeds usually only contain a snippet.
                 const storyText = await callGemini(headlineText, regionData.storySystem, true);
                 storyContentEl.textContent = storyText;
                 storyCache[headlineText] = storyText; 
@@ -297,7 +303,3 @@
     </script>
 </body>
 </html>
-
-
-
-
