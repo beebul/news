@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teletext Deals (OzBargain)</title>
-    <!-- Reusing your existing style.css -->
+    <title>Teletext Deals</title>
+    <!-- Reuse the existing style.css so it matches the News app -->
     <link rel="stylesheet" href="style.css"> 
 </head>
 <body>
 
     <div class="container">
-        <h1>Teletext Deals: OzBargain</h1>
+        <h1>OzB_RSS</h1>
 
         <!-- Tab Bar for Deal Categories -->
         <div class="tab-bar">
             <button class="tab-button active" data-region="TOP">Top Deals</button>
-            <button class="tab-button" data-region="NEW">New Deals</button>
+            <button class="tab-button" data-region="NEW">New Deals (Live)</button>
             <button class="tab-button" data-region="FREE">Freebies</button>
         </div>
 
@@ -30,7 +30,8 @@
         // --- CONFIGURATION ---
         let proxyApiUrl = "";
         let isConfigValid = false;
-        const CACHE_DURATION_MS = 1000 * 60 * 5; // 5 Minutes Cache (Deals move fast)
+        // 2 Minutes Cache for Deals (they expire fast)
+        const CACHE_DURATION_MS = 1000 * 60 * 2; 
 
         // --- APP STATE ---
         let currentRegion = "TOP";
@@ -43,18 +44,28 @@
         const refreshButton = document.getElementById('refresh-button');
         const tabButtons = document.querySelectorAll('.tab-button');
 
-        // --- PROMPT ENGINEERING FOR DEALS ---
+        // --- PROMPT ENGINEERING ---
         const queryMap = {
             TOP: {
-                query: "Use Google Search to find the current 'Top Deals' (most voted) on the OzBargain homepage right now. List the top 20 distinct deals. Format each line as: 'Item Name - Price - Retailer'. Return ONLY the list, one per line. Do not include links or intro text.",
+                // Strategy: RSS FEED (Popular Deals)
+                // Switched from Search to RSS for speed and accuracy
+                targetUrl: "https://www.ozbargain.com.au/deals/feed",
+                query: "You have been provided with the raw RSS feed data for 'Popular Deals' from OzBargain in the Context Data. Parse this XML/RSS data. Extract the titles of the top 20 deals. Format each line strictly as: 'Item Name'. Do not use markdown formatting. Return ONLY the list, one per line.",
+                useSearch: false,
                 storySystem: "You are a deal hunter. The user will provide a deal title. Find the details of this specific deal on OzBargain using Google Search. Summarize the following: 1) The Price, 2) The Retailer, 3) The Coupon Code (if any), 4) The Expiry Date, and 5) A brief description of why it is a good deal (or key comments/warnings from users). Format as a clean, plain-text memo."
             },
             NEW: {
-                query: "Use Google Search to find the 'Newest Deals' listed on OzBargain right now. List the top 20 distinct new entries. Format each line as: 'Item Name - Price - Retailer'. Return ONLY the list, one per line. Do not include links or intro text.",
-                storySystem: "You are a deal hunter. The user will provide a deal title. Find the details of this specific deal on OzBargain using Google Search. Summarize the following: 1) The Price, 2) The Retailer, 3) The Coupon Code (if any), 4) The Expiry Date, and 5) A brief description of why it is a good deal (or key comments/warnings from users). Format as a clean, plain-text memo."
+                // Strategy: RSS FEED (The new backend feature)
+                // This bypasses Google Search latency for brand new items
+                targetUrl: "https://www.ozbargain.com.au/feed/new",
+                query: "You have been provided with the raw RSS feed data from OzBargain in the Context Data. Parse this XML/RSS data. Extract the titles of the 20 most recent items. Format each line strictly as: 'Item Name'. Do not use markdown formatting like bold or italics. Return ONLY the list, one per line.",
+                useSearch: false, 
+                storySystem: "You are a deal hunter. Summarize this deal from OzBargain using Google Search."
             },
             FREE: {
+                // Strategy: SEARCH
                 query: "Use Google Search to find current 'Freebies' and '100% off' deals on OzBargain. List 20 distinct free items available right now. Return ONLY the item name and retailer, one per line. Do not include links or intro text.",
+                useSearch: true,
                 storySystem: "You are a deal hunter. The user will provide a freebie title. Find the details of this specific deal on OzBargain using Google Search. Summarize how to claim the freebie, any eligibility requirements (e.g. new customers only), and when it expires. Format as a clean, plain-text memo."
             }
         };
@@ -66,7 +77,6 @@
                 const response = await fetch('config.json');
                 if (!response.ok) throw new Error("config.json not found");
                 const config = await response.json();
-                
                 proxyApiUrl = config.proxyApiUrl;
 
                 if (!proxyApiUrl || proxyApiUrl.includes("your-name")) {
@@ -74,7 +84,6 @@
                 } else {
                     isConfigValid = true;
                     refreshButton.disabled = false;
-                    
                     if (!loadHeadlinesFromCache(currentRegion)) {
                         fetchNews(false); 
                     }
@@ -93,8 +102,8 @@
         function showConfigInputUI() {
             statusContainer.innerHTML = `
                 <div class="status-message error" style="flex-direction: column; align-items: flex-start;">
-                    <strong>Config Missing:</strong> Please create 'config.json' or enter your Cloudflare URL below to test:<br>
-                    <input type="text" id="manual-url" placeholder="https://news-proxy.name.workers.dev" style="width: 100%; margin-top: 5px; padding: 5px;">
+                    <strong>Config Missing:</strong> Please create 'config.json' or enter your Cloudflare URL below:<br>
+                    <input type="text" id="manual-url" placeholder="https://..." style="width: 100%; margin-top: 5px; padding: 5px;">
                     <button onclick="window.setManualUrl()" style="margin-top: 5px; cursor: pointer;">Set URL</button>
                 </div>`;
             
@@ -120,8 +129,7 @@
                 newHeadlines.forEach((hl, index) => {
                      hl.onclick = () => viewStory(hl, document.getElementById(`story-${index}`));
                 });
-                const minutesOld = Math.floor((now - cached.timestamp) / 60000);
-                setStatus(`Updated ${minutesOld} min ago`, false);
+                setStatus(`Updated recently`, false);
                 return true;
             }
             return false;
@@ -136,12 +144,14 @@
         }
 
         // --- API CALLER ---
-        async function callGemini(userQuery, systemInstruction, useSearch) {
+        async function callGemini(userQuery, systemInstruction, useSearch, targetUrl = null) {
             if (!isConfigValid) throw new Error("App not configured.");
+            
             const proxyPayload = {
                 userQuery,
                 systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : null,
-                tools: useSearch ? [{ "google_search": {} }] : null
+                tools: useSearch ? [{ "google_search": {} }] : null,
+                targetUrl: targetUrl // Send the RSS URL if we have one
             };
 
             let lastError = null;
@@ -186,18 +196,25 @@
             }
         }
 
-        // --- FETCH HEADLINES (Adapted for Deals) ---
+        // --- FETCH HEADLINES ---
         async function fetchNews(forceRefresh = false) {
             if (!isConfigValid) return;
             if (!forceRefresh && loadHeadlinesFromCache(currentRegion)) return;
 
-            setStatus("Searching OzBargain...", true);
+            setStatus("Searching Deals...", true);
             headlinesList.innerHTML = '';
             refreshButton.disabled = true;
 
             try {
                 const regionData = queryMap[currentRegion];
-                const rawText = await callGemini(regionData.query, null, true);
+                
+                // Call Gemini with the specific strategy for this region
+                const rawText = await callGemini(
+                    regionData.query, 
+                    null, 
+                    regionData.useSearch, 
+                    regionData.targetUrl
+                );
                 
                 // Parsing logic
                 const headlines = rawText.split('\n')
@@ -232,7 +249,7 @@
             }
         }
 
-        // --- VIEW STORY (Adapted for Deal Details) ---
+        // --- VIEW STORY ---
         async function viewStory(headlineEl, storyContentEl) {
             if (!isConfigValid || !storyContentEl) return;
             const headlineText = headlineEl.textContent;
@@ -248,11 +265,12 @@
                 return;
             }
 
-            storyContentEl.textContent = "Checking deal details...";
+            storyContentEl.textContent = "Checking details...";
             storyContentEl.style.display = 'block';
 
             try {
                 const regionData = queryMap[currentRegion];
+                // Note: We always use search to get details of a specific deal
                 const storyText = await callGemini(headlineText, regionData.storySystem, true);
                 storyContentEl.textContent = storyText;
                 storyCache[headlineText] = storyText; 
