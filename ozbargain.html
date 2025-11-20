@@ -10,7 +10,7 @@
 <body>
 
     <div class="container">
-        <h1>OzB</h1>
+        <h1>Teletext Deals: OzBargain</h1>
 
         <!-- Tab Bar for Deal Categories -->
         <div class="tab-bar">
@@ -48,24 +48,24 @@
         const queryMap = {
             TOP: {
                 // Strategy: RSS FEED (Popular Deals)
-                // Switched from Search to RSS for speed and accuracy
                 targetUrl: "https://www.ozbargain.com.au/deals/feed",
                 query: "You have been provided with the raw RSS feed data for 'Popular Deals' from OzBargain in the Context Data. Parse this XML/RSS data. Extract the titles of the top 20 deals. Format each line strictly as: 'Item Name'. Do not use markdown formatting. Return ONLY the list, one per line.",
                 useSearch: false,
                 storySystem: "You are a deal hunter. The user will provide a deal title. Find the details of this specific deal on OzBargain using Google Search. Summarize the following: 1) The Price, 2) The Retailer, 3) The Coupon Code (if any), 4) The Expiry Date, and 5) A brief description of why it is a good deal (or key comments/warnings from users). Format as a clean, plain-text memo."
             },
             NEW: {
-                // Strategy: RSS FEED (The new backend feature)
-                // This bypasses Google Search latency for brand new items
+                // Strategy: RSS FEED (Live Firehose)
                 targetUrl: "https://www.ozbargain.com.au/feed/new",
                 query: "You have been provided with the raw RSS feed data from OzBargain in the Context Data. Parse this XML/RSS data. Extract the titles of the 20 most recent items. Format each line strictly as: 'Item Name'. Do not use markdown formatting like bold or italics. Return ONLY the list, one per line.",
                 useSearch: false, 
                 storySystem: "You are a deal hunter. Summarize this deal from OzBargain using Google Search."
             },
             FREE: {
-                // Strategy: SEARCH
-                query: "Use Google Search to find current 'Freebies' and '100% off' deals on OzBargain. List 20 distinct free items available right now. Return ONLY the item name and retailer, one per line. Do not include links or intro text.",
-                useSearch: true,
+                // Strategy: RSS FEED (Freebies Category)
+                // UPDATED: Switched from Search to RSS for instant loading
+                targetUrl: "https://www.ozbargain.com.au/cat/freebies/feed",
+                query: "You have been provided with the raw RSS feed data for 'Freebies' from OzBargain in the Context Data. Parse this XML/RSS data. Extract the titles of the top 20 freebie items. Format each line strictly as: 'Item Name'. Do not use markdown formatting. Return ONLY the list, one per line.",
+                useSearch: false,
                 storySystem: "You are a deal hunter. The user will provide a freebie title. Find the details of this specific deal on OzBargain using Google Search. Summarize how to claim the freebie, any eligibility requirements (e.g. new customers only), and when it expires. Format as a clean, plain-text memo."
             }
         };
