@@ -56,8 +56,9 @@
             },
             ABC_AU: {
                 // STRATEGY: RSS FEED (Direct & Fast)
-                targetUrl: "https://www.abc.net.au/news/feed/51120/rss.xml", // ABC Top Stories
-                query: "You have been provided with the raw RSS feed data from ABC News Australia in the Context Data. Parse this XML data. Extract the titles of the top 20 news items. Return ONLY the clean headline text, one per line.",
+                // SWITCHED: From 'Top Stories' (51120) to 'Just In' (45910) to ensure 20+ results
+                targetUrl: "https://www.abc.net.au/news/feed/45910/rss.xml", 
+                query: "You have been provided with the raw RSS feed data from ABC News Australia ('Just In') in the Context Data. Parse this XML data. Extract the titles of the top 20 news items. Return ONLY the clean headline text, one per line.",
                 useSearch: false,
                 storySystem: "You are a news archivist. The user will provide a headline. Find the most relevant, real-time news story for that headline using Google Search, focusing on ABC News (Australia). Respond with a comprehensive, multi-paragraph, plain-text summary of the full article. Do not add any of your own commentary. Just return the plain text of the story."
             },
@@ -218,7 +219,7 @@
                     regionData.targetUrl
                 );
                 
-                // Robust Parsing
+                // Parsing logic
                 const headlines = rawText.split('\n')
                     .map(line => line.replace(/^(\d+\.|-|\*)\s*/, '').trim())
                     .filter(line => line.length > 5 && !line.startsWith("Source") && !line.includes("unable to")); 
@@ -303,4 +304,3 @@
     </script>
 </body>
 </html>
-
