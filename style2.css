@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Notepad Theme Mockup</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>*** TELETEXT NEWS SYSTEM v1.0 ***</h1>
+
+        <!-- Tabs looking like text commands -->
+        <div class="tab-bar">
+            <button class="tab-button active">BBC UK</button>
+            <button class="tab-button">ABC Australia</button>
+            <button class="tab-button">BBC Australia</button>
+        </div>
+
+        <button id="refresh-button">COMMAND: REFRESH_DATA</button>
+
+        <div class="status-message">
+            System: Connection established. 20 records retrieved.
+        </div>
+
+        <div id="headlines-list">
+            <!-- Mockup Item 1 -->
+            <div class="headline-item">
+                <div class="headline">1. Govt announces new digital infrastructure plan for rural areas</div>
+            </div>
+
+            <!-- Mockup Item 2 (Open) -->
+            <div class="headline-item">
+                <div class="headline">2. Markets react to latest inflation figures as trading opens</div>
+                <div class="story-content" style="display: block;">
+DATA RETRIEVED: 10:42 AM
+SOURCE: BBC FINANCE
+
+London markets have opened cautiously this morning following the release of the latest inflation figures, which showed a slight uptick to 3.1%. 
+
+Analysts suggest that while the rise was expected due to energy price fluctuations, it may delay any potential interest rate cuts by the Bank of England. 
+
+The FTSE 100 dipped 0.4% in early trading, with retail stocks taking the biggest hit as consumer confidence remains fragile.
+                </div>
+            </div>
+
+            <!-- Mockup Item 3 -->
+            <div class="headline-item">
+                <div class="headline">3. Rare comet visible tonight: How to see it from the UK</div>
+            </div>
+
+            <!-- Mockup Item 4 -->
+            <div class="headline-item">
+                <div class="headline">4. Sports update: England team selection announced for upcoming test</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
