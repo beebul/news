@@ -47,9 +47,11 @@
         // --- PROMPT ENGINEERING ---
         const queryMap = {
             TOP: {
-                // Strategy: SEARCH (Google is good at finding "Popular/Top")
-                query: "Use Google Search to find the current 'Top Deals' (most voted) on the OzBargain homepage right now. List the top 20 distinct deals. Format each line as: 'Item Name - Price - Retailer'. Return ONLY the list, one per line. Do not include links or intro text.",
-                useSearch: true,
+                // Strategy: RSS FEED (Popular Deals)
+                // Switched from Search to RSS for speed and accuracy
+                targetUrl: "https://www.ozbargain.com.au/deals/feed",
+                query: "You have been provided with the raw RSS feed data for 'Popular Deals' from OzBargain in the Context Data. Parse this XML/RSS data. Extract the titles of the top 20 deals. Format each line strictly as: 'Item Name'. Do not use markdown formatting. Return ONLY the list, one per line.",
+                useSearch: false,
                 storySystem: "You are a deal hunter. The user will provide a deal title. Find the details of this specific deal on OzBargain using Google Search. Summarize the following: 1) The Price, 2) The Retailer, 3) The Coupon Code (if any), 4) The Expiry Date, and 5) A brief description of why it is a good deal (or key comments/warnings from users). Format as a clean, plain-text memo."
             },
             NEW: {
