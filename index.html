@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teletext News</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style2.css">
 </head>
 <body>
 
@@ -74,11 +74,15 @@
                     isConfigValid = true;
                     refreshButton.disabled = false;
                     
-                    // 1. Load ONLY the current region immediately
-                    // This saves your API quota.
+                    // 1. Load the current region immediately
                     fetchNews(currentRegion);
 
-                    // REMOVED: Background pre-fetching loop to prevent hitting rate limits
+                    // 2. Pre-fetch ALL other regions in the background
+                    Object.keys(queryMap).forEach(region => {
+                        if (region !== currentRegion) {
+                            fetchNews(region);
+                        }
+                    });
                 }
             } catch (error) {
                 console.warn("Config load failed:", error);
@@ -105,7 +109,8 @@
                     isConfigValid = true;
                     refreshButton.disabled = false;
                     statusContainer.innerHTML = '';
-                    fetchNews(currentRegion);
+                    // Trigger all fetches
+                    Object.keys(queryMap).forEach(region => fetchNews(region));
                 }
             };
         }
@@ -115,9 +120,11 @@
             const cached = headlineCache[region];
             const now = Date.now();
             
+            // Only render if this is the CURRENTLY visible region
             if (region === currentRegion) {
                 if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
                     headlinesList.innerHTML = cached.html;
+                    // Re-attach event listeners to the injected HTML
                     const newHeadlines = headlinesList.querySelectorAll('.headline');
                     newHeadlines.forEach((hl, index) => {
                          hl.onclick = () => viewStory(hl, document.getElementById(`story-${index}`));
@@ -126,7 +133,12 @@
                     setStatus(`Updated ${minutesOld} min ago`, false);
                     return true;
                 }
-            } 
+            } else {
+                // For background regions, just check if valid cache exists so we don't re-fetch unnecessarily
+                if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
+                    return true;
+                }
+            }
             return false;
         }
 
@@ -156,11 +168,6 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(proxyPayload)
                     });
-                    
-                    if (response.status === 429) {
-                        throw new Error("Rate Limit Exceeded. Please wait a moment.");
-                    }
-
                     if (!response.ok) {
                         const errorBody = await response.text();
                         throw new Error(`Proxy Error: ${response.status} - ${errorBody}`);
@@ -171,15 +178,14 @@
                 } catch (error) {
                     console.error(`Attempt ${attempt} failed:`, error.message);
                     lastError = error;
-                    // If rate limit, wait longer
-                    const waitTime = error.message.includes("Rate Limit") ? 2000 : 1000;
-                    await new Promise(res => setTimeout(res, waitTime * attempt)); 
+                    await new Promise(res => setTimeout(res, 1000 * attempt)); 
                 }
             }
-            throw new Error(`${lastError.message}`);
+            throw new Error(`Failed to call proxy: ${lastError.message}`);
         }
 
         function setStatus(message, isLoading = false, isError = false) {
+            // Only show status for the ACTIVE region
             statusContainer.innerHTML = ''; 
             if (message) {
                 const statusMessage = document.createElement('div');
@@ -197,16 +203,17 @@
             }
         }
 
-        // --- FETCH LOGIC ---
+        // --- FETCH LOGIC (UPDATED FOR BACKGROUND FETCH) ---
         async function fetchNews(region = currentRegion, forceRefresh = false) {
             if (!isConfigValid) return;
 
             // 1. Check Cache
+            // If valid cache exists, load it (if active) or skip fetch (if background)
             if (!forceRefresh && loadHeadlinesFromCache(region)) {
                 return;
             }
 
-            // 2. Show Loading
+            // 2. If this is the active region, show loading UI
             if (region === currentRegion) {
                 setStatus("Accessing News Feed...", true);
                 headlinesList.innerHTML = '';
@@ -228,9 +235,11 @@
 
                 if (!headlines || headlines.length === 0) throw new Error("No headlines found.");
 
-                // 3. Build HTML
+                // 3. Build HTML String (Without attaching to DOM yet)
                 let htmlBuffer = "";
                 headlines.forEach((headlineText, index) => {
+                    // We construct the HTML string manually to save it to cache
+                    // The onclick is re-attached after loading from cache
                     htmlBuffer += `
                         <div class="headline-item">
                             <div class="headline" data-index="${index}">${headlineText}</div>
@@ -241,9 +250,9 @@
                 // 4. Save to Cache
                 saveHeadlinesToCache(region, htmlBuffer);
 
-                // 5. Render
+                // 5. If this is (or became) the active region, Render it now
                 if (region === currentRegion) {
-                    loadHeadlinesFromCache(region); 
+                    loadHeadlinesFromCache(region); // This handles the innerHTML and listeners
                     refreshButton.disabled = false;
                 }
 
@@ -296,12 +305,9 @@
                 btn.classList.toggle('active', btn.dataset.region === newRegion);
             });
             
-            // Try to load from cache first
-            if (!loadHeadlinesFromCache(newRegion)) {
-                // Only if NOT in cache, do we fetch. 
-                // This prevents accidental API calls if you just switch tabs back and forth.
-                fetchNews(newRegion, false);
-            }
+            // Load from cache (which should be populated by background fetch)
+            // If not ready yet, it will trigger a fetch
+            fetchNews(newRegion, false);
         }
 
         tabButtons.forEach(btn => {
