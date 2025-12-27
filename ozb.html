@@ -124,7 +124,7 @@
     </style>
 </head>
 <body>
-    <div class="header">OZBARGAIN_DEALS.TXT</div>
+    <div class="header">OZB_DEALS.TXT</div>
     <div id="content" class="loading">Loading...</div>
 
     <script>
@@ -170,10 +170,17 @@
                     const text = comment.querySelector('.comment-text, .content, [class*="text"]')?.textContent?.trim() || 
                                  comment.textContent?.trim() || '';
                     
+                    // Filter out login messages and other junk
+                    if (text.includes('Login or Join to leave a comment') || 
+                        text.includes('Login Join') ||
+                        text.length < 15) {
+                        return;
+                    }
+                    
                     // Create unique key from text (first 100 chars to handle slight variations)
                     const textKey = text.substring(0, 100).toLowerCase().trim();
                     
-                    if (text && text.length > 10 && !seenComments.has(textKey)) {
+                    if (text && !seenComments.has(textKey)) {
                         seenComments.add(textKey);
                         commentsHtml += `
                             <div class="comment">
@@ -204,11 +211,10 @@
             const toggleBtn = document.getElementById(`toggle-${dealId}`);
             
             if (commentsDiv.style.display === 'none' || !commentsDiv.className.includes('loaded')) {
+                commentsDiv.style.display = 'block';
+                toggleBtn.textContent = '[hide comments]';
                 if (!commentsDiv.className.includes('loaded')) {
                     fetchComments(dealUrl, dealId);
-                } else {
-                    commentsDiv.style.display = 'block';
-                    toggleBtn.textContent = '[hide comments]';
                 }
             } else {
                 commentsDiv.style.display = 'none';
