@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OzBargain Deals</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-style: italic;
+        }
+        .error {
+            background: #fee;
+            border: 1px solid #c33;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .deal {
+            background: white;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #e67e22;
+        }
+        .deal-title {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 8px;
+        }
+        .deal-title a {
+            color: #2c3e50;
+            text-decoration: none;
+        }
+        .deal-title a:hover {
+            text-decoration: underline;
+        }
+        .deal-meta {
+            color: #666;
+            font-size: 0.9em;
+            margin: 5px 0;
+        }
+        .deal-description {
+            margin-top: 10px;
+            line-height: 1.5;
+        }
+        .refresh-info {
+            text-align: center;
+            color: #666;
+            font-size: 0.85em;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔥 OzBargain Latest Deals</h1>
+    <div id="content" class="loading">Loading deals...</div>
+
+    <script>
+        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+        const RSS_URL = 'https://www.ozbargain.com.au/feed';
+
+        async function fetchDeals() {
+            try {
+                const response = await fetch(CORS_PROXY + encodeURIComponent(RSS_URL));
+                if (!response.ok) throw new Error('Failed to fetch RSS feed');
+                
+                const text = await response.text();
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(text, 'text/xml');
+                
+                const items = xml.querySelectorAll('item');
+                if (items.length === 0) {
+                    throw new Error('No deals found in feed');
+                }
+                
+                let html = '';
+                items.forEach((item, index) => {
+                    const title = item.querySelector('title')?.textContent || 'No title';
+                    const link = item.querySelector('link')?.textContent || '#';
+                    const description = item.querySelector('description')?.textContent || '';
+                    const pubDate = item.querySelector('pubDate')?.textContent || '';
+                    
+                    // Clean up description (remove HTML tags)
+                    const cleanDesc = description.replace(/<[^>]*>/g, '').trim();
+                    
+                    // Format date
+                    let dateStr = '';
+                    if (pubDate) {
+                        const date = new Date(pubDate);
+                        dateStr = date.toLocaleString('en-AU', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                        });
+                    }
+                    
+                    html += `
+                        <div class="deal">
+                            <div class="deal-title">
+                                <a href="${link}" target="_blank">${title}</a>
+                            </div>
+                            <div class="deal-meta">Posted: ${dateStr}</div>
+                            ${cleanDesc ? `<div class="deal-description">${cleanDesc.substring(0, 300)}${cleanDesc.length > 300 ? '...' : ''}</div>` : ''}
+                        </div>
+                    `;
+                });
+                
+                const now = new Date().toLocaleTimeString('en-AU');
+                html += `<div class="refresh-info">Last updated: ${now} | Refresh page for latest deals</div>`;
+                
+                document.getElementById('content').innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('content').innerHTML = `
+                    <div class="error">
+                        <strong>Error loading deals:</strong><br>
+                        ${error.message}<br><br>
+                        <small>Try refreshing the page. If the problem persists, the RSS feed or CORS proxy may be temporarily unavailable.</small>
+                    </div>
+                `;
+            }
+        }
+
+        // Load deals when page loads
+        fetchDeals();
+    </script>
+</body>
+</html>
