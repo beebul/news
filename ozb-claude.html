@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OzBargain Deals</title>
+    <title>OzBargain Deals 2</title>
     <style>
         body {
             font-family: 'Courier New', monospace;
@@ -64,6 +64,18 @@
             padding-top: 20px;
             border-top: 1px solid #ddd;
         }
+        .retry-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            margin-top: 10px;
+        }
+        .retry-btn:hover {
+            background: #2980b9;
+        }
     </style>
 </head>
 <body>
@@ -71,17 +83,31 @@
     <div id="content" class="loading">Loading deals...</div>
 
     <script>
-        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+        const PROXIES = [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/raw?url=',
+            'https://cors-anywhere.herokuapp.com/'
+        ];
         const RSS_URL = 'https://www.ozbargain.com.au/feed';
+        let proxyIndex = 0;
 
-        async function fetchDeals() {
+        async function fetchDeals(retryCount = 0) {
             try {
-                const response = await fetch(CORS_PROXY + encodeURIComponent(RSS_URL));
-                if (!response.ok) throw new Error('Failed to fetch RSS feed');
+                const proxy = PROXIES[proxyIndex];
+                const url = proxy + encodeURIComponent(RSS_URL);
+                
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 
                 const text = await response.text();
                 const parser = new DOMParser();
                 const xml = parser.parseFromString(text, 'text/xml');
+                
+                // Check for parsing errors
+                const parseError = xml.querySelector('parsererror');
+                if (parseError) {
+                    throw new Error('Failed to parse RSS feed');
+                }
                 
                 const items = xml.querySelectorAll('item');
                 if (items.length === 0) {
@@ -128,11 +154,30 @@
                 
             } catch (error) {
                 console.error('Error:', error);
+                
+                // Try next proxy if available
+                if (retryCount < PROXIES.length - 1) {
+                    proxyIndex++;
+                    document.getElementById('content').innerHTML = `
+                        <div class="loading">Trying alternative method (${proxyIndex + 1}/${PROXIES.length})...</div>
+                    `;
+                    setTimeout(() => fetchDeals(retryCount + 1), 1000);
+                    return;
+                }
+                
+                // All proxies failed
                 document.getElementById('content').innerHTML = `
                     <div class="error">
-                        <strong>Error loading deals:</strong><br>
-                        ${error.message}<br><br>
-                        <small>Try refreshing the page. If the problem persists, the RSS feed or CORS proxy may be temporarily unavailable.</small>
+                        <strong>Unable to load deals</strong><br><br>
+                        All CORS proxies failed. This usually means:<br>
+                        • The proxies are temporarily down<br>
+                        • Your network is blocking the requests<br>
+                        • OzBargain's RSS feed changed<br><br>
+                        <strong>Solutions:</strong><br>
+                        1. Host this on GitHub Pages (works better than local files)<br>
+                        2. Try again in a few minutes<br>
+                        3. Check if you can access <a href="https://www.ozbargain.com.au/feed" target="_blank">ozbargain.com.au/feed</a> directly<br><br>
+                        <button class="retry-btn" onclick="location.reload()">Retry Now</button>
                     </div>
                 `;
             }
