@@ -161,6 +161,8 @@
                 
                 let commentsHtml = '';
                 let count = 0;
+                const seenComments = new Set();
+                
                 comments.forEach((comment) => {
                     if (count >= 10) return; // Limit to 10 comments
                     
@@ -168,7 +170,11 @@
                     const text = comment.querySelector('.comment-text, .content, [class*="text"]')?.textContent?.trim() || 
                                  comment.textContent?.trim() || '';
                     
-                    if (text && text.length > 10) {
+                    // Create unique key from text (first 100 chars to handle slight variations)
+                    const textKey = text.substring(0, 100).toLowerCase().trim();
+                    
+                    if (text && text.length > 10 && !seenComments.has(textKey)) {
+                        seenComments.add(textKey);
                         commentsHtml += `
                             <div class="comment">
                                 <div class="comment-author">${author}:</div>
