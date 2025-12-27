@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>notes.txt</title>
+    <style>
+        body {
+            font-family: 'Consolas', 'Courier New', monospace;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #ffffff;
+            color: #000000;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+        a {
+            color: #0000ee;
+            text-decoration: underline;
+        }
+        a:visited {
+            color: #551a8b;
+        }
+        .header {
+            margin-bottom: 30px;
+            border-bottom: 1px solid #000;
+            padding-bottom: 10px;
+        }
+        .loading {
+            font-style: italic;
+        }
+        .error {
+            border: 1px solid #000;
+            padding: 10px;
+            margin: 20px 0;
+        }
+        .deal {
+            margin: 25px 0;
+            padding-bottom: 20px;
+            border-bottom: 1px dashed #ccc;
+        }
+        .deal:last-child {
+            border-bottom: none;
+        }
+        .deal-title {
+            font-weight: normal;
+            margin-bottom: 5px;
+        }
+        .deal-meta {
+            color: #666;
+            font-size: 13px;
+            margin: 3px 0;
+        }
+        .deal-description {
+            margin-top: 8px;
+            color: #333;
+        }
+        .comments-section {
+            margin-top: 15px;
+            padding-left: 20px;
+            border-left: 2px solid #ddd;
+            display: none;
+        }
+        .comments-section.loading {
+            display: block;
+            color: #666;
+            font-style: italic;
+        }
+        .comments-section.loaded {
+            display: block;
+        }
+        .comment {
+            margin: 10px 0;
+            padding: 8px 0;
+            border-bottom: 1px dotted #eee;
+        }
+        .comment:last-child {
+            border-bottom: none;
+        }
+        .comment-author {
+            font-weight: bold;
+            font-size: 13px;
+        }
+        .comment-text {
+            margin-top: 3px;
+        }
+        .comment-meta {
+            color: #999;
+            font-size: 12px;
+            margin-top: 3px;
+        }
+        .toggle-comments {
+            color: #0000ee;
+            text-decoration: underline;
+            cursor: pointer;
+            font-size: 13px;
+            background: none;
+            border: none;
+            padding: 0;
+            font-family: inherit;
+        }
+        .toggle-comments:hover {
+            color: #551a8b;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #000;
+            color: #666;
+            font-size: 12px;
+        }
+        .retry-btn {
+            background: none;
+            border: 1px solid #000;
+            padding: 5px 15px;
+            cursor: pointer;
+            font-family: inherit;
+            margin-top: 10px;
+        }
+        .retry-btn:hover {
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">OZBARGAIN_DEALS.TXT</div>
+    <div id="content" class="loading">Loading...</div>
+
+    <script>
+        const PROXIES = [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/raw?url=',
+            'https://cors-anywhere.herokuapp.com/'
+        ];
+        const RSS_URL = 'https://www.ozbargain.com.au/feed';
+        let proxyIndex = 0;
+
+        async function fetchComments(dealUrl, dealId) {
+            const commentsDiv = document.getElementById(`comments-${dealId}`);
+            commentsDiv.className = 'comments-section loading';
+            commentsDiv.innerHTML = 'Loading comments...';
+            
+            try {
+                const proxy = PROXIES[0];
+                const response = await fetch(proxy + encodeURIComponent(dealUrl));
+                if (!response.ok) throw new Error('Failed to fetch page');
+                
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Try to find comments - OzBargain structure may vary
+                const comments = doc.querySelectorAll('.comment, [class*="comment"]');
+                
+                if (comments.length === 0) {
+                    commentsDiv.innerHTML = 'No comments found or unable to parse comments.';
+                    commentsDiv.className = 'comments-section loaded';
+                    return;
+                }
+                
+                let commentsHtml = '';
+                let count = 0;
+                comments.forEach((comment) => {
+                    if (count >= 10) return; // Limit to 10 comments
+                    
+                    const author = comment.querySelector('.submitted, .author, [class*="author"]')?.textContent?.trim() || 'Anonymous';
+                    const text = comment.querySelector('.comment-text, .content, [class*="text"]')?.textContent?.trim() || 
+                                 comment.textContent?.trim() || '';
+                    
+                    if (text && text.length > 10) {
+                        commentsHtml += `
+                            <div class="comment">
+                                <div class="comment-author">${author}:</div>
+                                <div class="comment-text">${text.substring(0, 500)}${text.length > 500 ? '...' : ''}</div>
+                            </div>
+                        `;
+                        count++;
+                    }
+                });
+                
+                if (commentsHtml) {
+                    commentsDiv.innerHTML = commentsHtml + `<div class="comment-meta">Showing first ${count} comments</div>`;
+                } else {
+                    commentsDiv.innerHTML = 'Could not extract comments from page.';
+                }
+                commentsDiv.className = 'comments-section loaded';
+                
+            } catch (error) {
+                console.error('Error fetching comments:', error);
+                commentsDiv.innerHTML = 'Failed to load comments. The page structure may have changed or CORS proxy failed.';
+                commentsDiv.className = 'comments-section loaded';
+            }
+        }
+
+        function toggleComments(dealUrl, dealId) {
+            const commentsDiv = document.getElementById(`comments-${dealId}`);
+            const toggleBtn = document.getElementById(`toggle-${dealId}`);
+            
+            if (commentsDiv.style.display === 'none' || !commentsDiv.className.includes('loaded')) {
+                if (!commentsDiv.className.includes('loaded')) {
+                    fetchComments(dealUrl, dealId);
+                } else {
+                    commentsDiv.style.display = 'block';
+                    toggleBtn.textContent = '[hide comments]';
+                }
+            } else {
+                commentsDiv.style.display = 'none';
+                toggleBtn.textContent = '[view comments]';
+            }
+        }
+
+        async function fetchDeals(retryCount = 0) {
+            try {
+                const proxy = PROXIES[proxyIndex];
+                const url = proxy + encodeURIComponent(RSS_URL);
+                
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const text = await response.text();
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(text, 'text/xml');
+                
+                const parseError = xml.querySelector('parsererror');
+                if (parseError) {
+                    throw new Error('Failed to parse RSS feed');
+                }
+                
+                const items = xml.querySelectorAll('item');
+                if (items.length === 0) {
+                    throw new Error('No deals found in feed');
+                }
+                
+                let html = '';
+                items.forEach((item, index) => {
+                    const title = item.querySelector('title')?.textContent || 'No title';
+                    const link = item.querySelector('link')?.textContent || '#';
+                    const description = item.querySelector('description')?.textContent || '';
+                    const pubDate = item.querySelector('pubDate')?.textContent || '';
+                    
+                    const cleanDesc = description.replace(/<[^>]*>/g, '').trim();
+                    
+                    let dateStr = '';
+                    if (pubDate) {
+                        const date = new Date(pubDate);
+                        dateStr = date.toLocaleString('en-AU', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                        });
+                    }
+                    
+                    const dealId = `deal-${index}`;
+                    
+                    html += `
+                        <div class="deal">
+                            <div class="deal-title">
+                                [${index + 1}] <a href="${link}" target="_blank">${title}</a>
+                            </div>
+                            <div class="deal-meta">Posted: ${dateStr} | <button class="toggle-comments" id="toggle-${dealId}" onclick="toggleComments('${link}', '${dealId}')">[view comments]</button></div>
+                            ${cleanDesc ? `<div class="deal-description">${cleanDesc.substring(0, 400)}${cleanDesc.length > 400 ? '...' : ''}</div>` : ''}
+                            <div id="comments-${dealId}" class="comments-section" style="display: none;"></div>
+                        </div>
+                    `;
+                });
+                
+                const now = new Date().toLocaleString('en-AU');
+                html += `<div class="footer">Last updated: ${now}</div>`;
+                
+                document.getElementById('content').innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                
+                if (retryCount < PROXIES.length - 1) {
+                    proxyIndex++;
+                    document.getElementById('content').innerHTML = `
+                        <div class="loading">Trying alternative method (${proxyIndex + 1}/${PROXIES.length})...</div>
+                    `;
+                    setTimeout(() => fetchDeals(retryCount + 1), 1000);
+                    return;
+                }
+                
+                document.getElementById('content').innerHTML = `
+                    <div class="error">
+                        ERROR: Unable to load deals
+                        
+                        All CORS proxies failed.
+                        
+                        Solutions:
+                        1. Host this on GitHub Pages
+                        2. Try again in a few minutes
+                        3. Check https://www.ozbargain.com.au/feed directly
+                        
+                        <button class="retry-btn" onclick="location.reload()">Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        fetchDeals();
+    </script>
+</body>
+</html>
